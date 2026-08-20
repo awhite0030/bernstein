@@ -360,6 +360,29 @@ class TestContentHashing:
         assert result.source_content_hash == expected_digest
         assert compute_source_content_hash(unicode_text) == expected_digest
 
+    @pytest.mark.parametrize(
+        "tier_pressure",
+        [
+            BudgetPressure(),
+            BudgetPressure(turn_count=3, context_pct_used=0.2),
+            BudgetPressure(turn_count=3, context_pct_used=0.85),
+            BudgetPressure(turn_count=3, context_pct_used=0.2, idle_seconds=400.0),
+            BudgetPressure(session_complete=True),
+        ],
+    )
+    def test_empty_region_produces_defined_hash_state(self, tier_pressure: BudgetPressure) -> None:
+        """An empty pre-compaction region must not crash the tier and must hash
+        to the well-defined SHA-256 of the empty byte string, identically
+        across every tier - "nothing to compact" is a defined state, not an
+        unhandled edge case."""
+        empty_digest = content_hash_of(b"")
+        assert compute_source_content_hash("") == empty_digest
+
+        ctx = TierContext(session_id="s-empty", context_text="", pressure=tier_pressure)
+        result = compact(ctx)
+        assert result.source_content_hash == empty_digest
+        assert result.before_tokens == 0
+
 
 # ---------------------------------------------------------------------------
 # Referenced artifact hashing (Issue #3696)
@@ -428,6 +451,15 @@ class TestReferencedArtifactHashing:
 class TestCompactionVerification:
     def test_verify_compaction_references_empty(self) -> None:
         v_res = verify_compaction_references({})
+        assert v_res.valid is True
+        assert v_res.checked_count == 0
+
+    def test_empty_region_with_no_references_verifies_clean(self) -> None:
+        """Compacting an empty region with nothing referenced is a defined,
+        vacuously-valid state end to end, not an unverifiable one."""
+        ctx = TierContext(session_id="s-empty", context_text="", pressure=BudgetPressure())
+        result = compact(ctx)
+        v_res = verify_compacted_step(result)
         assert v_res.valid is True
         assert v_res.checked_count == 0
 
