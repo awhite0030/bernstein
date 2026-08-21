@@ -229,10 +229,13 @@ def _load_dry_run_tasks(plan_file: Path | None) -> list[Any]:
     return [Task.from_dict(td) for td in tasks_data]
 
 
-def _confirm_run(*, goal: str | None, seed_file: str | None) -> bool:
+def _confirm_run(*, goal: str | None, seed_file: str | None, model_override: str | None = None) -> bool:
     """Show confirmation prompt before execution. Returns True to proceed."""
     effective_goal = goal
     team: list[str] | None = None
+    role_model_policy: dict[str, dict[str, str]] | None = None
+    seed_model: str | None = None
+    seed_cli: str | None = None
 
     if effective_goal is None:
         _peek_path: Path | None = Path(seed_file) if seed_file is not None else find_seed_file()
@@ -243,15 +246,24 @@ def _confirm_run(*, goal: str | None, seed_file: str | None) -> bool:
                 _seed = _parse_seed(_peek_path)
                 effective_goal = _seed.goal
                 team = list(_seed.team) if _seed.team != "auto" else None
-                from bernstein.core.plan_approval import configure_plan_models
-
-                configure_plan_models(
-                    _seed.role_model_policy,
-                    default_model=_seed.model,
-                    default_cli=(_seed.cli if _seed.cli and _seed.cli != "auto" else None),
-                )
+                role_model_policy = _seed.role_model_policy
+                seed_model = _seed.model
+                seed_cli = _seed.cli if _seed.cli and _seed.cli != "auto" else None
 
     if effective_goal:
+        # An explicit --model always wins over the seed's default, mirroring
+        # _resolve_model_and_cli's precedence in run_preflight.py. Without
+        # this the panel fell back to the seed model (or the "sonnet"
+        # complexity default when there was no seed), so
+        # `bernstein run --model X` showed a plan-approval panel that named
+        # and priced a model the run would not use (issue #4214).
+        from bernstein.core.plan_approval import configure_plan_models
+
+        configure_plan_models(
+            role_model_policy,
+            default_model=model_override or seed_model,
+            default_cli=seed_cli,
+        )
         plan_obj, plan_tasks = _build_synthetic_plan(effective_goal, team)
         from bernstein.cli.plan_display import display_plan_and_confirm
 
@@ -2615,7 +2627,7 @@ def _run_impl(
             raise SystemExit(1) from exc
 
     # Confirmation prompt before execution (skip with --auto-approve)
-    if not auto_approve and not _confirm_run(goal=goal, seed_file=seed_file):
+    if not auto_approve and not _confirm_run(goal=goal, seed_file=seed_file, model_override=model):
         return
 
     if goal is not None:
