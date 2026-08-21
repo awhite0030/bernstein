@@ -929,21 +929,24 @@ def receipt_is_stale(receipt: dict[str, Any], *, now: datetime) -> bool:
 def write_admission_receipt(base_dir: Path, receipt: dict[str, Any]) -> Path:
     """Write a receipt under its content-addressed name.
 
-    The filename embeds the adapter name and the receipt hash prefix. The
-    adapter component is validated against a strict allow-pattern and the
-    resolved path is containment-checked against ``base_dir``, so a hostile
-    adapter string can never escape the receipts directory.
+    The filename embeds the lowercased adapter name and the receipt hash
+    prefix -- lowercased so a display name like ``"Aider"`` addresses the
+    same file a lookup by registry key would. The adapter component is
+    validated against a strict allow-pattern and the resolved path is
+    containment-checked against ``base_dir``, so a hostile adapter string can
+    never escape the receipts directory.
 
     Raises:
         ValueError: The adapter name fails validation, or the resolved path
             escapes ``base_dir``.
     """
     adapter = str(receipt.get("adapter") or "")
-    if not _RECEIPT_NAME_RE.match(adapter):
+    adapter_key = adapter.lower()
+    if not _RECEIPT_NAME_RE.match(adapter_key):
         raise ValueError(f"invalid adapter name for receipt filename: {adapter!r}")
     sha = receipt_sha256(receipt)
     base_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{adapter}-{sha[:16]}"
+    stem = f"{adapter_key}-{sha[:16]}"
     try:
         candidate = contained_path(base_dir, f"{stem}.json", label="receipt path")
         # The temporary sibling is opened *before* the rename, so it needs the
@@ -978,12 +981,13 @@ def load_admission_receipt(base_dir: Path, adapter: str) -> tuple[dict[str, Any]
         :data:`REASON_RECEIPT_TAMPERED` when every candidate failed its
         content-hash check.
     """
-    if not _RECEIPT_NAME_RE.match(adapter) or not base_dir.exists():
+    adapter_key = adapter.lower()
+    if not _RECEIPT_NAME_RE.match(adapter_key) or not base_dir.exists():
         return None, REASON_NO_RECEIPT
 
     candidates: list[dict[str, Any]] = []
     tampered = False
-    for path in sorted(base_dir.glob(f"{adapter}-*.json")):
+    for path in sorted(base_dir.glob(f"{adapter_key}-*.json")):
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -1312,7 +1316,7 @@ def preflight_admission(
         try:
             write_admission_receipt(decisions_dir, receipt)
         except (OSError, ValueError) as exc:
-            logger.warning("Could not write admission gate receipt for %s: %s", adapter, type(exc).__name__)
+            logger.warning("Could not write admission gate receipt for %s: %s", adapter, exc)
 
     if chain is not None:
         _anchor_in_chain(chain, receipt, sha)

@@ -411,6 +411,20 @@ def test_load_admission_receipt_returns_the_newest(receipts_dir: Path) -> None:
     assert stored["installed_version"] == "kimi 1.0.0"
 
 
+def test_receipt_round_trips_for_a_non_lowercase_adapter_name(receipts_dir: Path) -> None:
+    """A display name like ``AiderAdapter.name()``'s "Aider" must persist and load (#4224)."""
+    decision = evaluate_admission(_bare_evidence(adapter="Aider", binary="aider"))
+    receipt = build_admission_receipt(decision, generated_at=_NOW.isoformat())
+
+    write_admission_receipt(receipts_dir, receipt)
+    stored, problem = load_admission_receipt(receipts_dir, "Aider")
+
+    assert problem == ""
+    assert stored is not None
+    assert stored["adapter"] == "Aider"
+    assert stored["verdict"] == receipt["verdict"]
+
+
 # ---------------------------------------------------------------------------
 # The gate
 # ---------------------------------------------------------------------------
