@@ -127,6 +127,7 @@ class AgentTrace:
     turn_count: int = 0
     # Settings snapshot captured at spawn time (T557)
     settings_snapshot: dict[str, Any] = field(default_factory=dict[str, Any])
+    context_receipt: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def duration_s(self) -> float | None:
@@ -155,6 +156,7 @@ class AgentTrace:
             log_path=d.get("log_path", ""),
             task_snapshots=cast("list[dict[str, Any]]", d.get("task_snapshots", [])),
             settings_snapshot=cast("dict[str, Any]", d.get("settings_snapshot", {})),
+            context_receipt=cast("list[dict[str, Any]]", d.get("context_receipt", [])),
         )
 
 

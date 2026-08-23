@@ -1219,6 +1219,7 @@ class AgentSession:
     # event, so the session record names exactly the digests the chain
     # attests. Empty when the session's tasks declare no attachments.
     multimodal_attachments: list[dict[str, str]] = field(default_factory=list)
+    context_receipt: list[dict[str, object]] = field(default_factory=list)
 
 
 class IsolationMode(StrEnum):
