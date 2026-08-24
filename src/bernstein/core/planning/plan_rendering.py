@@ -69,7 +69,7 @@ class PlanRendering:
         )
 
 
-def compute_plan_rendering(
+def render_plan_hash(
     plan: TaskPlan,
     journal_head: str | None = None,
 ) -> PlanRendering:
