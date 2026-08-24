@@ -69,7 +69,7 @@ class PlanRendering:
         )
 
 
-def render_plan(
+def compute_plan_rendering(
     plan: TaskPlan,
     journal_head: str | None = None,
 ) -> PlanRendering:
@@ -80,6 +80,9 @@ def render_plan(
     deterministic precision.  The hash is computed over the *canonical
     JSON payload* (not the human-readable text) so that format changes
     in the text do not break hash stability.
+
+    Type correctness is assumed from the ``TaskPlan`` dataclass contract;
+    no runtime type-guarding is performed on the plan fields.
 
     Args:
         plan: The task execution plan to render.
