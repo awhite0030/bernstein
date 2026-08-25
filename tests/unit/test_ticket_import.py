@@ -20,6 +20,7 @@ from bernstein.core.integrations.tickets import (
     TicketAuthError,
     TicketParseError,
     TicketPayload,
+    TicketRateLimitError,
     fetch_ticket,
 )
 
@@ -360,3 +361,34 @@ def test_explicit_role_flag_overrides_inference() -> None:
     payload = build_task_payload(ticket, role="backend", priority="low")
     assert payload["role"] == "backend"
     assert payload["priority"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Rate limit error
+# ---------------------------------------------------------------------------
+
+
+def test_ticket_rate_limit_error_attributes_and_hierarchy() -> None:
+    err = TicketRateLimitError(
+        provider="github",
+        wait_seconds=15.5,
+        retry_count=2,
+        last_response_headers={"retry-after": "15", "x-ratelimit-remaining": "0"},
+    )
+    assert isinstance(err, RuntimeError)
+    assert not isinstance(err, TicketAuthError)
+    assert not isinstance(err, TicketParseError)
+    assert err.provider == "github"
+    assert err.wait_seconds == 15.5
+    assert err.retry_count == 2
+    assert err.last_response_headers == {"retry-after": "15", "x-ratelimit-remaining": "0"}
+    assert "github" in str(err)
+    assert "15.5" in str(err)
+
+
+def test_ticket_rate_limit_error_defaults() -> None:
+    err = TicketRateLimitError("linear")
+    assert err.provider == "linear"
+    assert err.wait_seconds == 0.0
+    assert err.retry_count == 0
+    assert err.last_response_headers == {}

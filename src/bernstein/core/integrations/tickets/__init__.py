@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 __all__ = [
     "TicketAuthError",
     "TicketParseError",
     "TicketPayload",
+    "TicketRateLimitError",
     "fetch_ticket",
 ]
 
@@ -44,6 +45,41 @@ class TicketAuthError(RuntimeError):
 
 class TicketParseError(RuntimeError):
     """Raised when a ticket URL cannot be parsed or the response is malformed."""
+
+
+class TicketRateLimitError(RuntimeError):
+    """Raised when a ticket provider rate-limits API requests.
+
+    Carries metadata about the rate limit event so callers can handle
+    rate limiting specially (e.g. implementing backoff or waiting).
+
+    Attributes:
+        provider: Provider name (e.g. 'github', 'linear', 'jira').
+        wait_seconds: Seconds to wait before retrying.
+        retry_count: Number of retries attempted so far.
+        last_response_headers: HTTP response headers from the rate-limited response.
+    """
+
+    def __init__(
+        self,
+        provider: str,
+        wait_seconds: float = 0.0,
+        retry_count: int = 0,
+        last_response_headers: dict[str, Any] | None = None,
+        message: str | None = None,
+    ) -> None:
+        self.provider: str = str(provider)
+        self.wait_seconds: float = float(wait_seconds)
+        self.retry_count: int = int(retry_count)
+        self.last_response_headers: dict[str, Any] = (
+            dict(last_response_headers) if last_response_headers is not None else {}
+        )
+        if message is None:
+            message = (
+                f"Rate limit exceeded for provider {self.provider!r}. "
+                f"Wait {self.wait_seconds}s (retries: {self.retry_count})."
+            )
+        super().__init__(message)
 
 
 _LINEAR_WEB = re.compile(
@@ -84,6 +120,7 @@ def fetch_ticket(url: str) -> TicketPayload:
     Raises:
         TicketParseError: URL is not recognized or the response is malformed.
         TicketAuthError: provider credentials are missing or invalid.
+        TicketRateLimitError: provider rate limit was exceeded.
     """
     provider = _classify(url)
     if provider == "linear":
