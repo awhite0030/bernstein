@@ -27,10 +27,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 #: Subdirectory of the audit dir holding immutable segment snapshots.
 TILES_SUBDIR = "tiles"
@@ -116,7 +113,9 @@ def list_tile_segments(audit_dir: Path) -> list[str]:
     if not tiles_dir.is_dir():
         return []
     return sorted(
-        p.name for p in tiles_dir.iterdir() if p.is_file() and not p.name.endswith(".tile") and not p.name.endswith(".tmp")
+        p.name
+        for p in tiles_dir.iterdir()
+        if p.is_file() and not p.name.endswith(".tile") and not p.name.endswith(".tmp")
     )
 
 
