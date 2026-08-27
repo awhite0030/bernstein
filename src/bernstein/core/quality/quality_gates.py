@@ -187,7 +187,7 @@ class QualityGatesConfig:
 
     enabled: bool = True
     lint: bool = True
-    lint_command: str = "ruff check ."
+    lint_command: str = "uv run ruff check ."
     type_check: bool = False
     type_check_command: str = "pyright"
     tests: bool = False

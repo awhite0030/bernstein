@@ -1725,7 +1725,7 @@ def _parse_quality_gates(raw: object) -> QualityGatesConfig | None:
     return QualityGatesConfig(
         enabled=_qg_bool("enabled", True),
         lint=_qg_bool("lint", True),
-        lint_command=_qg_str("lint_command", "ruff check ."),
+        lint_command=_qg_str("lint_command", "uv run ruff check ."),
         type_check=_qg_bool("type_check", False),
         type_check_command=_qg_str("type_check_command", "pyright"),
         tests=_qg_bool("tests", False),
