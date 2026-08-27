@@ -180,6 +180,7 @@ def seal_cmd(anchor_git: bool, allow_broken_chain: bool) -> None:
 
     # Generate content-addressed hash tiles for audit segments
     from bernstein.core.persistence.tiles import generate_tiles
+
     tile_paths = generate_tiles(AUDIT_DIR, seal)
 
     checkpoint = None

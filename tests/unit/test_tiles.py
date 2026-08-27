@@ -88,6 +88,7 @@ def test_read_functions_do_not_write(tmp_path: Path) -> None:
 # Hash-tile write-side tests (generate_tiles, issue #3829 slice 1)
 # ---------------------------------------------------------------------------
 
+
 def _make_seal(segments: list[tuple[str, bytes]]) -> dict:
     """Build a minimal seal dict mimicking compute_seal output shape."""
     import hashlib
