@@ -24,6 +24,7 @@ one that prints "not implemented yet" is a promise the code has not made.
 from __future__ import annotations
 
 import json
+import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -258,6 +259,33 @@ def _fail(message: str, *, field: str, as_json: bool, path: Path) -> None:
     raise SystemExit(1)
 
 
+def _hub_preflight_workers() -> None:
+    """Refuse to boot when multi-worker mode is requested.
+
+    The :class:`~bernstein.core.volunteer.lease_store.LeaseStore` coordinates
+    mutations with an in-process ``asyncio.Lock`` and appends to JSONL without
+    ``fcntl.flock``.  Running the hub under ``uvicorn --workers N>1`` causes
+    torn JSONL lines and duplicate task claims.
+
+    Raises:
+        SystemExit: When the resolved worker count is greater than 1.
+    """
+    for var in ("BERNSTEIN_WORKERS", "WEB_CONCURRENCY"):
+        raw = os.environ.get(var)
+        if raw is not None and raw.strip():
+            try:
+                value = int(raw)
+            except ValueError:
+                continue
+            if value > 1:
+                raise SystemExit(
+                    "Bernstein volunteer hub lease store is single-process; refusing "
+                    f"to boot with workers={value}. Set BERNSTEIN_WORKERS=1 "
+                    "(also clear WEB_CONCURRENCY)."
+                )
+            return
+
+
 @volunteer_group.command("hub")
 @click.option("--host", default="127.0.0.1", help="Host to bind to.")
 @click.option("--port", type=int, default=8053, help="Port to bind to.")
@@ -277,6 +305,7 @@ def hub_cmd(host: str, port: int, lease_store_path: str | None) -> None:
     .. note:: The lease store is single-process only. Do not run with
        ``uvicorn --workers N>1`` or multiple replicas.
     """
+    _hub_preflight_workers()
     try:
         import uvicorn
     except ImportError:
@@ -293,5 +322,4 @@ def hub_cmd(host: str, port: int, lease_store_path: str | None) -> None:
     store = LeaseStore(Path(lease_store_path))
     app = build_hub_app(store)
     click.echo(f"Bernstein volunteer hub listening on http://{host}:{port}")
-    click.echo("NOTE: single-process only — do not use --workers N>1 or replicas")
     uvicorn.run(app, host=host, port=port, log_level="warning")

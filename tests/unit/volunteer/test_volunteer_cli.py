@@ -367,3 +367,87 @@ def test_the_group_is_registered_on_the_cli() -> None:
 
     assert "volunteer" in cli.commands
     assert "verify" in cli.commands["volunteer"].commands
+
+
+# -------------------------------------------------------------------------------------------------
+# hub command tests
+# -------------------------------------------------------------------------------------------------
+
+
+class TestHubCommandRegistered:
+    def test_hub_is_a_subcommand_of_volunteer(self) -> None:
+        """The hub command must be reachable as ``volunteer hub``."""
+        from bernstein.cli.main import cli
+
+        assert "hub" in cli.commands["volunteer"].commands
+
+    def test_hub_help_shows_host_port_and_lease_store_options(self) -> None:
+        """--help must surface the three user-facing options."""
+        from bernstein.cli.main import cli
+
+        result = CliRunner().invoke(cli.commands["volunteer"], ["hub", "--help"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "--host" in result.output
+        assert "--port" in result.output
+        assert "--lease-store" in result.output
+
+
+class TestHubLeaseStoreDefault:
+    def test_lease_store_option_default_is_none(self) -> None:
+        """The --lease-store option has no default; the command sets it internally.
+
+        If the Click default were a non-None path, the command would use that path
+        instead of the hard-coded default inside ``hub_cmd``.
+        """
+        from bernstein.cli.commands.volunteer_cmd import hub_cmd
+
+        lease_store_param = next(p for p in hub_cmd.params if p.name == "lease_store_path")
+        assert lease_store_param.default is None
+
+
+class TestHubWorkersEnforcement:
+    """Single-process enforcement — the hub must refuse to start with BERNSTEIN_WORKERS>1."""
+
+    def test_refuses_bernstein_workers_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """BERNSTEIN_WORKERS=2 exits before importing uvicorn, with a clear message."""
+        monkeypatch.setenv("BERNSTEIN_WORKERS", "2")
+        monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+
+        from bernstein.cli.commands.volunteer_cmd import _hub_preflight_workers
+
+        with pytest.raises(SystemExit) as exc:
+            _hub_preflight_workers()
+
+        message = str(exc.value)
+        assert "workers=2" in message
+        assert "single-process" in message
+
+    def test_refuses_web_concurrency_3(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """WEB_CONCURRENCY=3 (when BERNSTEIN_WORKERS is absent) also exits."""
+        monkeypatch.delenv("BERNSTEIN_WORKERS", raising=False)
+        monkeypatch.setenv("WEB_CONCURRENCY", "3")
+
+        from bernstein.cli.commands.volunteer_cmd import _hub_preflight_workers
+
+        with pytest.raises(SystemExit) as exc:
+            _hub_preflight_workers()
+
+        assert "workers=3" in str(exc.value)
+
+    def test_allows_bernstein_workers_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """BERNSTEIN_WORKERS=1 is the canonical single-worker setting and must pass."""
+        monkeypatch.setenv("BERNSTEIN_WORKERS", "1")
+        monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+
+        from bernstein.cli.commands.volunteer_cmd import _hub_preflight_workers
+
+        assert _hub_preflight_workers() is None
+
+    def test_allows_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When neither env var is set the guard passes."""
+        monkeypatch.delenv("BERNSTEIN_WORKERS", raising=False)
+        monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+
+        from bernstein.cli.commands.volunteer_cmd import _hub_preflight_workers
+
+        assert _hub_preflight_workers() is None
