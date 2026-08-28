@@ -24,7 +24,6 @@ one that prints "not implemented yet" is a promise the code has not made.
 from __future__ import annotations
 
 import json
-import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -270,20 +269,9 @@ def _hub_preflight_workers() -> None:
     Raises:
         SystemExit: When the resolved worker count is greater than 1.
     """
-    for var in ("BERNSTEIN_WORKERS", "WEB_CONCURRENCY"):
-        raw = os.environ.get(var)
-        if raw is not None and raw.strip():
-            try:
-                value = int(raw)
-            except ValueError:
-                continue
-            if value > 1:
-                raise SystemExit(
-                    "Bernstein volunteer hub lease store is single-process; refusing "
-                    f"to boot with workers={value}. Set BERNSTEIN_WORKERS=1 "
-                    "(also clear WEB_CONCURRENCY)."
-                )
-            return
+    from bernstein.core.server.server_app import preflight_multi_worker_guard
+
+    preflight_multi_worker_guard()
 
 
 @volunteer_group.command("hub")
@@ -305,7 +293,9 @@ def hub_cmd(host: str, port: int, lease_store_path: str | None) -> None:
     .. note:: The lease store is single-process only. Do not run with
        ``uvicorn --workers N>1`` or multiple replicas.
     """
-    _hub_preflight_workers()
+    from bernstein.core.server.server_app import preflight_multi_worker_guard
+
+    preflight_multi_worker_guard()
     try:
         import uvicorn
     except ImportError:
