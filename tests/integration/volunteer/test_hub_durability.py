@@ -6,20 +6,16 @@ visible after a restart when both processes share the same lease-store path.
 
 from __future__ import annotations
 
-import asyncio
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
 import httpx
 import pytest
-import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from bernstein.core.volunteer.hub_app import build_hub_app
 from bernstein.core.volunteer.lease_store import LeaseStore
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
@@ -94,77 +90,74 @@ class TestHubDurability:
         """A submission made before a kill is still present after restart.
 
         Sequence:
-        1. Start hub with a temp lease store path.
+        1. Start hub process with a temp lease store path.
         2. Enroll, claim, submit task t-restart-durable.
-        3. Kill hub.
+        3. Kill hub process.
         4. Restart hub pointing at the same lease store.
         5. Assert the submission is still visible.
         """
         lease_store_path = tmp_path / "leases.jsonl"
         url = "http://127.0.0.1:18765"
 
-        # Use the hub as a library (no subprocess needed for the first phase).
-        # This exercises the same code path as the CLI.
-        store = LeaseStore(lease_store_path)
-        app = build_hub_app(store)
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        server = uvicorn.Server(
-            config=uvicorn.Config(app, host="127.0.0.1", port=18765, log_level="error"),
+        # Start hub as a real subprocess — same code path as the CLI.
+        hub_proc = subprocess.Popen(
+            [
+                sys.executable, "-m", "bernstein",
+                "volunteer", "hub",
+                "--host", "127.0.0.1",
+                "--port", "18765",
+                "--lease-store", str(lease_store_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
 
-        def _run_server() -> None:
-            loop.run_until_complete(server.serve())
-
-        thread = threading.Thread(target=_run_server, daemon=True)
-        thread.start()
-
-        # Wait for hub to be ready
-        assert _hub_is_ready(url), "hub failed to start"
-
         try:
+            assert _hub_is_ready(url), "hub failed to start"
+
             with httpx.Client(base_url=url, timeout=10.0) as client:
                 _, pubkey_pem = _make_keypair()
                 worker_id = _enroll(client, pubkey_pem)
                 _claim(client, "t-restart-durable", worker_id)
                 _submit(client, "t-restart-durable", worker_id)
         finally:
-            loop.call_soon_threadsafe(server.force_exit)
-            thread.join(timeout=10)
-            loop.close()
+            hub_proc.terminate()
+            hub_proc.wait(timeout=10)
 
         # The hub is dead. Verify the lease store file was written.
         assert lease_store_path.exists(), "lease store file was not created"
 
-        # Restart with a fresh in-memory state that replays the log.
-        store2 = LeaseStore(lease_store_path)
-        app2 = build_hub_app(store2)
-        server2 = uvicorn.Server(
-            config=uvicorn.Config(app2, host="127.0.0.1", port=18765, log_level="error"),
+        # Restart hub with the same lease store path.
+        hub_proc2 = subprocess.Popen(
+            [
+                sys.executable, "-m", "bernstein",
+                "volunteer", "hub",
+                "--host", "127.0.0.1",
+                "--port", "18765",
+                "--lease-store", str(lease_store_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-        loop2 = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop2)
-
-        def _run_server2() -> None:
-            loop2.run_until_complete(server2.serve())
-
-        thread2 = threading.Thread(target=_run_server2, daemon=True)
-        thread2.start()
-
-        assert _hub_is_ready(url), "hub failed to restart"
 
         try:
-            # Verify the submission survived: query the lease directly from the
-            # replayed store without needing another HTTP round-trip.
-            lease = store2.lease_for("t-restart-durable")
+            assert _hub_is_ready(url), "hub failed to restart"
+
+            with httpx.Client(base_url=url, timeout=10.0) as client:
+                # Re-enroll with the same keypair (idempotent → same worker_id).
+                enrolled_worker_id = _enroll(client, pubkey_pem)
+                assert enrolled_worker_id == worker_id
+
+            # Verify the submission survived by reading the replayed store directly.
+            store = LeaseStore(lease_store_path)
+            lease = store.lease_for("t-restart-durable")
             assert lease is not None, "task lease not found after restart"
             assert lease.submission is not None, "submission was lost after restart"
             assert lease.submission.bundle_digest == "sha256:testdigest"
             assert lease.submission.location == "https://example.com/bundle.tar.gz"
-            assert lease.worker_id == worker_id
+            assert lease.worker_id == worker_id, (
+                f"worker_id mismatch: lease={lease.worker_id} vs expected={worker_id}"
+            )
         finally:
-            loop2.call_soon_threadsafe(server2.force_exit)
-            thread2.join(timeout=10)
-            loop2.close()
+            hub_proc2.terminate()
+            hub_proc2.wait(timeout=10)
