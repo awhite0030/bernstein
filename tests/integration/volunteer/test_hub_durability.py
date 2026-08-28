@@ -102,11 +102,17 @@ class TestHubDurability:
         # Start hub as a real subprocess — same code path as the CLI.
         hub_proc = subprocess.Popen(
             [
-                sys.executable, "-m", "bernstein",
-                "volunteer", "hub",
-                "--host", "127.0.0.1",
-                "--port", "18765",
-                "--lease-store", str(lease_store_path),
+                sys.executable,
+                "-m",
+                "bernstein",
+                "volunteer",
+                "hub",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "18765",
+                "--lease-store",
+                str(lease_store_path),
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -130,11 +136,17 @@ class TestHubDurability:
         # Restart hub with the same lease store path.
         hub_proc2 = subprocess.Popen(
             [
-                sys.executable, "-m", "bernstein",
-                "volunteer", "hub",
-                "--host", "127.0.0.1",
-                "--port", "18765",
-                "--lease-store", str(lease_store_path),
+                sys.executable,
+                "-m",
+                "bernstein",
+                "volunteer",
+                "hub",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "18765",
+                "--lease-store",
+                str(lease_store_path),
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -155,9 +167,7 @@ class TestHubDurability:
             assert lease.submission is not None, "submission was lost after restart"
             assert lease.submission.bundle_digest == "sha256:testdigest"
             assert lease.submission.location == "https://example.com/bundle.tar.gz"
-            assert lease.worker_id == worker_id, (
-                f"worker_id mismatch: lease={lease.worker_id} vs expected={worker_id}"
-            )
+            assert lease.worker_id == worker_id, f"worker_id mismatch: lease={lease.worker_id} vs expected={worker_id}"
         finally:
             hub_proc2.terminate()
             hub_proc2.wait(timeout=10)
