@@ -346,6 +346,7 @@ Full per-file module map. `AGENTS.md`'s own "Module map" section links here inst
 | `toast.py`                | TUI-009: Notification toast for events |
 | `tokens.py`               | Per-agent token usage tracker - lightweight thread-safe token accounting |
 | `vim_mode.py`             | TUI-014: Vim-mode keybindings for TUI navigation |
+| `volunteer_browser.py`    |  |
 | `widgets.py`              | Custom Textual widgets for the Bernstein TUI |
 | `worker_badges.py`        | Worker badge identity module - format worker metadata into Rich badge strings |
 | `worktree_status.py`      | Compact runtime and worktree health pane for the Bernstein TUI |
