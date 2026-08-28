@@ -109,7 +109,7 @@ class VolunteerBrowserPanel(Static):
 
     #project-list {
         height: 100%;
-        border-right: slim $surface-darken-1;
+        border-right: solid $surface-darken-1;
     }
 
     #project-details {
@@ -123,9 +123,8 @@ class VolunteerBrowserPanel(Static):
     }
 
     .section-title {
-        text-style: bold;
+        text-style: bold underline;
         color: $accent;
-        text-decoration: underline;
     }
 
     .detail-label {
