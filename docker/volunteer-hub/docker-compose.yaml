@@ -1,0 +1,70 @@
+# Volunteer hub: the HTTP surface where donor workers enroll, claim,
+# heartbeat, submit, and release volunteer tasks.
+#
+# Served behind a Caddy reverse proxy that terminates TLS automatically via
+# Let's Encrypt. The hub itself is never exposed on a host port directly.
+#
+# Architecture:
+#   bernstein-volunteer-hub - FastAPI volunteer hub (internal port 8053)
+#   caddy                   - HTTPS reverse proxy, public-facing on 80/443
+#
+# Setup:
+#   1. cp docker/volunteer-hub/.env.volunteer-hub.example docker/volunteer-hub/.env.volunteer-hub
+#   2. Replace the DOMAIN placeholder in .env.volunteer-hub with your domain.
+#   3. Point that domain's DNS at this server.
+#   4. docker compose -f docker/volunteer-hub/docker-compose.yaml --env-file docker/volunteer-hub/.env.volunteer-hub up -d
+#
+# The hub is exposed at https://<your-domain>/healthz (public) and the full
+# volunteer API surface at https://<your-domain>/volunteer/*.
+
+services:
+  # ── Volunteer hub ───────────────────────────────────────────────────────
+  # Runs `bernstein volunteer hub serve` on the published bernstein image.
+  # The lease store lives on a named volume so accepted submissions survive
+  # `docker compose down && up` — the store is JSONL, single-process only.
+  bernstein-volunteer-hub:
+    image: ghcr.io/sipyourdrink-ltd/bernstein:latest
+    entrypoint: ["python", "-m", "uvicorn"]
+    command:
+      - "bernstein.core.volunteer.hub_app:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8053"
+    volumes:
+      - lease-store:/workspace/.sdd/runtime/volunteer
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8053/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Public HTTPS reverse proxy ───────────────────────────────────────────
+  # Caddy handles TLS automatically (Let's Encrypt) and forwards the
+  # X-Forwarded-Proto header so the hub can trust the scheme Caddy chose.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${VOLUNTEER_HUB_DOMAIN:-volunteer.bernstein.test}
+    depends_on:
+      bernstein-volunteer-hub:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  lease-store:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local

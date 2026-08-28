@@ -1,0 +1,42 @@
+# Caddy reverse proxy for the volunteer hub.
+#
+# - Auto-TLS via Let's Encrypt (just point DNS at this server)
+# - Replace {$DOMAIN:volunteer.bernstein.test} with your actual domain or IP.
+# - Forward only what the hub exposes; X-Forwarded-Proto is set to {scheme}
+#   so the FastAPI app knows whether the original request was http or https.
+# - /healthz is a public endpoint reachable without authentication.
+
+{$DOMAIN:volunteer.bernstein.test} {
+    # Public health check — reachable without auth so monitors can probe it.
+    handle_path /healthz {
+        reverse_proxy bernstein-volunteer-hub:8053 {
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Volunteer worker API surface.
+    # Paths mirror the FastAPI router mounted in
+    # bernstein.core.volunteer.hub_app.build_hub_app().
+    handle_path /volunteer* {
+        reverse_proxy bernstein-volunteer-hub:8053 {
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Root redirect → /healthz
+    handle / {
+        redir /healthz permanent
+    }
+
+    # Anything else → 404
+    handle {
+        respond 404
+    }
+
+    encode gzip
+
+    log {
+        output stderr
+        format console
+    }
+}
