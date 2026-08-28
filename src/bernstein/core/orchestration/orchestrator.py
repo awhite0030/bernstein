@@ -62,7 +62,7 @@ from bernstein.core.context_degradation_detector import (
 from bernstein.core.context_recommendations import RecommendationEngine
 from bernstein.core.cost.budget_actions import BudgetAction, BudgetPolicy, apply_policy
 from bernstein.core.cost_tracker import CostTracker
-from bernstein.core.defaults import ORCHESTRATOR
+from bernstein.core.defaults import AGENT, ORCHESTRATOR
 from bernstein.core.dep_validator import DependencyValidator
 from bernstein.core.dependency_scan import (
     DependencyScanStatus,
@@ -2227,6 +2227,24 @@ class Orchestrator:
 
         # 5. Reap dead/stale agents and fail their tasks
         reap_dead_agents(self, result, tasks_by_status)
+
+        # 5a. Eagerly evict file locks held by agents with missed heartbeats.
+        #     This is the primary expiry signal — stale locks are released
+        #     within one heartbeat interval rather than waiting for the
+        #     LOCK_TTL_SECONDS safety net.
+        try:
+            last_heartbeat: dict[str, float] = {
+                aid: session.heartbeat_ts for aid, session in self._agents.items() if session.heartbeat_ts > 0.0
+            }
+            max_misses = max(1, int(AGENT.heartbeat_stale_s / 15.0))
+            evicted = self._lock_manager.evict_missed_heartbeats(max_misses, last_heartbeat)
+            if evicted:
+                logger.debug(
+                    "evict_missed_heartbeats: evicted %d lock(s) for stale agent(s)",
+                    len(evicted),
+                )
+        except Exception as exc:
+            logger.warning("File lock heartbeat eviction failed: %s", exc)
 
         # 5b. Retry any pushes that failed in previous ticks (normal cadence)
         if _run_normal:

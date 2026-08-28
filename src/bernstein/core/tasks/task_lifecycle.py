@@ -2898,12 +2898,12 @@ def claim_and_spawn_batches(
             orch._agents[session.id] = session
             for _t in batch:
                 orch._task_to_session[_t.id] = session.id
+            session.heartbeat_ts = time.time()
             _claim_file_ownership(orch, session.id, batch)
             alive_count += 1
             result.spawned.append(session.id)
             assigned_task_ids.update(t.id for t in batch)
             _claimed_titles.update(_base_title(t.title) for t in batch)
-            session.heartbeat_ts = time.time()
             orch._spawn_failures.pop(batch_key, None)
             spawn_failure_history.pop(batch_key, None)
             # Tell the supervisor the batch recovered, and leave evidence
@@ -5483,11 +5483,14 @@ def _claim_file_ownership(orch: Any, agent_id: str, tasks: list[Task]) -> None:
         if not all_files:
             continue
         if lock_manager is not None:
+            agent_session = orch._agents.get(agent_id)
+            heartbeat_ts = agent_session.heartbeat_ts if agent_session is not None else 0.0
             lock_manager.acquire(
                 all_files,
                 agent_id=agent_id,
                 task_id=task.id,
                 task_title=task.title,
+                heartbeat_ts=heartbeat_ts,
             )
         # Keep legacy dict in sync so existing code that reads _file_ownership still works
         for fpath in all_files:

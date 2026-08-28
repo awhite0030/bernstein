@@ -48,6 +48,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 LOCK_TTL_SECONDS = 7_200  # 2 hours - expire stale locks from crashed agents
+# Same sampling interval as the orchestrator worker heartbeat loop.  Used by
+# evict_missed_heartbeats to translate "missed N samples" into a seconds
+# threshold.
+_HEARTBEAT_SAMPLE_INTERVAL_S = 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +196,9 @@ class FileLock:
         task_id: ID of the task that triggered the lock acquisition.
         task_title: Human-readable task title for diagnostics.
         locked_at: Unix timestamp when the lock was acquired.
+        heartbeat_ts: Unix timestamp of the agent's last heartbeat.  0.0
+            means "no heartbeat recorded" and the lock is exempt from
+            heartbeat-based eviction (falls back to TTL only).
     """
 
     file_path: str
@@ -199,6 +206,7 @@ class FileLock:
     task_id: str
     task_title: str
     locked_at: float
+    heartbeat_ts: float = 0.0
 
 
 class FileLockManager:
@@ -264,6 +272,7 @@ class FileLockManager:
         agent_id: str,
         task_id: str,
         task_title: str = "",
+        heartbeat_ts: float = 0.0,
     ) -> list[str]:
         """Try to lock *files* for *agent_id*.
 
@@ -278,6 +287,10 @@ class FileLockManager:
             agent_id: ID of the requesting agent.
             task_id: ID of the task that owns the files.
             task_title: Human-readable title for diagnostics / status dashboards.
+            heartbeat_ts: Unix timestamp of the agent's last heartbeat.  Set to
+                0.0 (default) when the orchestrator has not yet observed a
+                heartbeat for this agent — the lock falls back to TTL-only
+                expiry.
 
         Returns:
             Empty list on success, or the paths of files with conflicting locks.
@@ -304,6 +317,7 @@ class FileLockManager:
                     task_id=task_id,
                     task_title=task_title,
                     locked_at=now,
+                    heartbeat_ts=heartbeat_ts,
                 )
             if files:
                 self._save()
@@ -380,6 +394,57 @@ class FileLockManager:
             del self._locks[f]
         if expired:
             self._save()
+
+    def evict_missed_heartbeats(
+        self,
+        max_consecutive_misses: int,
+        last_heartbeat: dict[str, float],
+    ) -> list[str]:
+        """Eagerly evict locks from agents whose heartbeats are too stale.
+
+        This is the primary expiry signal; TTL-based expiry via
+        :meth:`_evict_expired_unlocked` remains as a safety net for
+        crash-recovery (agents that never emitted a heartbeat).
+
+        A lock is eligible for eviction when its agent's last heartbeat
+        timestamp is older than ``max_consecutive_misses *``
+        ``heartbeat_interval_s`` seconds (the default interval is the
+        orchestrator's ``_HEARTBEAT_SAMPLE_INTERVAL_S`` = 15 s).  Locks
+        with ``heartbeat_ts == 0.0`` are exempt — they fall back to TTL
+        only and are never evicted here.
+
+        Args:
+            max_consecutive_misses: Maximum tolerated missed heartbeat
+                samples before eviction.  E.g. 8 misses x 15 s = 120 s
+                (matches the default stale threshold).
+            last_heartbeat: Mapping of agent_id → Unix timestamp of the
+                most recent heartbeat observed by the orchestrator.
+
+        Returns:
+            List of file paths whose locks were evicted.
+        """
+        with self._guard():
+            interval_s = _HEARTBEAT_SAMPLE_INTERVAL_S
+            stale_threshold = max_consecutive_misses * interval_s
+            now = time.time()
+            evicted: list[str] = []
+            for fpath, lock in list(self._locks.items()):
+                if lock.heartbeat_ts <= 0.0:
+                    continue
+                agent_last = last_heartbeat.get(lock.agent_id, 0.0)
+                if agent_last > 0.0 and (now - agent_last) > stale_threshold:
+                    logger.debug(
+                        "Evicting lock for %s (agent %s heartbeat stale: %.1fs old, threshold %.1fs)",
+                        fpath,
+                        lock.agent_id,
+                        now - agent_last,
+                        stale_threshold,
+                    )
+                    del self._locks[fpath]
+                    evicted.append(fpath)
+            if evicted:
+                self._save()
+            return evicted
 
     def _load(self) -> None:
         """Load persisted lock state from disk, silently ignoring corrupt data."""

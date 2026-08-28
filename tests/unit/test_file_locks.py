@@ -319,6 +319,70 @@ def test_expired_lock_allows_reacquire(workdir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Heartbeat-based eviction
+# ---------------------------------------------------------------------------
+
+
+def _write_backdated_heartbeat_lock(workdir: Path, file_path: str, heartbeat_ts: float) -> None:
+    """Rewrite the persisted lock JSON so *file_path* has the given *heartbeat_ts*."""
+    lock_path = workdir / ".sdd" / "runtime" / "file_locks.json"
+    data = json.loads(lock_path.read_text())
+    for entry in data:
+        if entry["file_path"] == file_path:
+            entry["heartbeat_ts"] = heartbeat_ts
+    lock_path.write_text(json.dumps(data))
+
+
+def test_evict_missed_heartbeats_removes_stale_lock(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=time.time() - 300)
+    stale_now = time.time() - 300  # 5 min old — well past 8 misses × 15s = 120s
+    evicted = mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={"a1": stale_now})
+    assert evicted == ["src/foo.py"]
+    assert mgr.is_locked("src/foo.py") is False
+
+
+def test_evict_missed_heartbeats_skips_fresh_lock(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=time.time())
+    evicted = mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={"a1": time.time()})
+    assert evicted == []
+    assert mgr.is_locked("src/foo.py") is True
+
+
+def test_evict_missed_heartbeats_skips_zero_heartbeat(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=0.0)
+    evicted = mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={"a1": time.time() - 9999})
+    assert evicted == []
+    assert mgr.is_locked("src/foo.py") is True
+
+
+def test_evict_missed_heartbeats_skips_unknown_agent(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=time.time() - 300)
+    evicted = mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={})
+    assert evicted == []
+    assert mgr.is_locked("src/foo.py") is True
+
+
+def test_evict_missed_heartbeats_persists_on_disk(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=time.time() - 300)
+    mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={"a1": time.time() - 300})
+    mgr2 = FileLockManager(mgr._path.parent.parent)
+    assert not mgr2.is_locked("src/foo.py")
+
+
+def test_evict_missed_heartbeats_allows_reacquire(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=time.time() - 300)
+    mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={"a1": time.time() - 300})
+    conflicts = mgr.acquire(["src/foo.py"], agent_id="a2", task_id="t2")
+    assert conflicts == []
+
+
+def test_evict_missed_heartbeats_returns_empty_when_nothing_evicted(mgr: FileLockManager) -> None:
+    mgr.acquire(["src/foo.py"], agent_id="a1", task_id="t1", heartbeat_ts=time.time())
+    evicted = mgr.evict_missed_heartbeats(max_consecutive_misses=8, last_heartbeat={"a1": time.time()})
+    assert evicted == []
+
+
+# ---------------------------------------------------------------------------
 # Cross-process file locking (audit-077)
 # ---------------------------------------------------------------------------
 
