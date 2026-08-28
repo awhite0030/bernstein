@@ -6,6 +6,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 from textual.app import App
+from textual.binding import Binding
 from textual.message import Message
 
 from bernstein.tui.volunteer_browser import (
@@ -59,6 +60,20 @@ def _sample_status_summary() -> VolunteerStatusSummary:
         allowed_paths=["/src", "/tests"],
         egress_hosts=["api.example.com"],
         topics=["python", "cli"],
+        active_tasks=5,
+        budget_consumption="25%",
+    )
+
+
+def _sample_status_summary_with_topics(topics: list[str]) -> VolunteerStatusSummary:
+    return VolunteerStatusSummary(
+        repo="https://github.com/example/project",
+        name="Example Project",
+        requirements="Test requirements",
+        manifest_digest="abc123",
+        allowed_paths=["/src", "/tests"],
+        egress_hosts=["api.example.com"],
+        topics=topics,
         active_tasks=5,
         budget_consumption="25%",
     )
@@ -285,14 +300,18 @@ async def test_apply_filters_local_ok_only() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_filters_topics_case_insensitive() -> None:
-    """apply_filters(topics=...) matches demand case-insensitively."""
+    """apply_filters(topics=...) matches VolunteerStatusSummary.topics case-insensitively."""
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        py = VolunteerProjectEntry(repo="py", name="Py", task_label="ok", local_ok=True, demand="PYTHON web")
-        js = VolunteerProjectEntry(repo="js", name="JS", task_label="ok", local_ok=True, demand="javascript node")
+        py = VolunteerProjectEntry(repo="py", name="Py", task_label="ok", local_ok=True, demand="high")
+        js = VolunteerProjectEntry(repo="js", name="JS", task_label="ok", local_ok=True, demand="high")
         panel._projects = [py, js]
         panel._filtered_projects = [py, js]
+        panel._summaries = {
+            "py": _sample_status_summary_with_topics(["python", "web"]),
+            "js": _sample_status_summary_with_topics(["javascript", "node"]),
+        }
 
         panel.apply_filters(topics=["python"])
         await pilot.pause()
@@ -302,14 +321,18 @@ async def test_apply_filters_topics_case_insensitive() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_filters_languages_case_insensitive() -> None:
-    """apply_filters(languages=...) matches demand case-insensitively."""
+    """apply_filters(languages=...) matches VolunteerStatusSummary.topics case-insensitively."""
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        py = VolunteerProjectEntry(repo="py", name="Py", task_label="ok", local_ok=True, demand="language:Python")
-        rs = VolunteerProjectEntry(repo="rs", name="RS", task_label="ok", local_ok=True, demand="language:Rust")
+        py = VolunteerProjectEntry(repo="py", name="Py", task_label="ok", local_ok=True, demand="high")
+        rs = VolunteerProjectEntry(repo="rs", name="RS", task_label="ok", local_ok=True, demand="high")
         panel._projects = [py, rs]
         panel._filtered_projects = [py, rs]
+        panel._summaries = {
+            "py": _sample_status_summary_with_topics(["python"]),
+            "rs": _sample_status_summary_with_topics(["rust"]),
+        }
 
         panel.apply_filters(languages=["python"])
         await pilot.pause()
@@ -404,3 +427,110 @@ def test_default_css_contains_panel_rules() -> None:
     assert "#browser-container" in css
     assert "#project-list" in css
     assert "#project-details" in css
+
+
+# -----------------------------------------------------------------------
+# Key bindings and action handlers
+# -----------------------------------------------------------------------
+
+
+def test_volunteer_browser_panel_bindings() -> None:
+    """VolunteerBrowserPanel defines key bindings for join and leave."""
+    bindings = VolunteerBrowserPanel.BINDINGS
+    actions = {b.action: b.key for b in bindings if isinstance(b, Binding)}
+    assert actions.get("join") == "j"
+    assert actions.get("leave") == "l"
+
+
+@pytest.mark.asyncio
+async def test_action_join_dispatches_message() -> None:
+    """action_join dispatches VolunteerJoinAction for the selected project."""
+    app = _VolunteerBrowserHarnessApp()
+    async with app.run_test() as pilot:
+        panel = app.query_one(VolunteerBrowserPanel)
+        entry = _sample_project_entry()
+        panel.update_data([entry], {entry.repo: _sample_status_summary()})
+        await pilot.pause()
+
+        panel.action_join()
+        await pilot.pause()
+
+        assert len(app.join_actions) == 1
+        assert app.join_actions[0].repo == entry.repo
+
+
+@pytest.mark.asyncio
+async def test_action_leave_dispatches_message() -> None:
+    """action_leave dispatches VolunteerLeaveAction for the selected project."""
+    app = _VolunteerBrowserHarnessApp()
+    async with app.run_test() as pilot:
+        panel = app.query_one(VolunteerBrowserPanel)
+        entry = _sample_project_entry()
+        panel.update_data([entry], {entry.repo: _sample_status_summary()})
+        await pilot.pause()
+
+        panel.action_leave()
+        await pilot.pause()
+
+        assert len(app.leave_actions) == 1
+        assert app.leave_actions[0].repo == entry.repo
+
+
+@pytest.mark.asyncio
+async def test_on_action_join_and_leave_aliases() -> None:
+    """on_action_join and on_action_leave invoke action_join and action_leave."""
+    app = _VolunteerBrowserHarnessApp()
+    async with app.run_test() as pilot:
+        panel = app.query_one(VolunteerBrowserPanel)
+        entry = _sample_project_entry()
+        panel.update_data([entry], {entry.repo: _sample_status_summary()})
+        await pilot.pause()
+
+        panel.on_action_join()
+        await pilot.pause()
+        assert len(app.join_actions) == 1
+        assert app.join_actions[0].repo == entry.repo
+
+        panel.on_action_leave()
+        await pilot.pause()
+        assert len(app.leave_actions) == 1
+        assert app.leave_actions[0].repo == entry.repo
+
+
+@pytest.mark.asyncio
+async def test_action_join_and_leave_no_projects() -> None:
+    """action_join and action_leave do not dispatch when no project exists."""
+    app = _VolunteerBrowserHarnessApp()
+    async with app.run_test() as pilot:
+        panel = app.query_one(VolunteerBrowserPanel)
+        panel.action_join()
+        panel.action_leave()
+        await pilot.pause()
+
+        assert len(app.join_actions) == 0
+        assert len(app.leave_actions) == 0
+
+
+@pytest.mark.asyncio
+async def test_keybinding_press_triggers_actions() -> None:
+    """Pressing 'j' or 'l' triggers join/leave actions in TUI."""
+    app = _VolunteerBrowserHarnessApp()
+    async with app.run_test() as pilot:
+        panel = app.query_one(VolunteerBrowserPanel)
+        entry = _sample_project_entry()
+        panel.update_data([entry], {entry.repo: _sample_status_summary()})
+        await pilot.pause()
+
+        table = panel.query_one("#project-list")
+        table.focus()
+        await pilot.pause()
+
+        await pilot.press("j")
+        await pilot.pause()
+        assert len(app.join_actions) == 1
+        assert app.join_actions[0].repo == entry.repo
+
+        await pilot.press("l")
+        await pilot.pause()
+        assert len(app.leave_actions) == 1
+        assert app.leave_actions[0].repo == entry.repo

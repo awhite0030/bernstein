@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from rich.text import Text
+from textual.binding import Binding, BindingType
 from textual.message import Message
 from textual.widgets import DataTable, Static
 
@@ -93,6 +94,11 @@ class VolunteerBrowserPanel(Static):
     Left Pane: DataTable showing a list of available projects.
     Right Pane: Detailed view of the selected project's requirements and policy.
     """
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("j", "join", "Join", show=True),
+        Binding("l", "leave", "Leave", show=True),
+    ]
 
     DEFAULT_CSS = """
     VolunteerBrowserPanel {
@@ -195,21 +201,13 @@ class VolunteerBrowserPanel(Static):
         if local_ok_only:
             self._filtered_projects = [p for p in self._filtered_projects if p.local_ok]
 
-        if topics:
-            # Filter by topics - this would need proper integration with manifest data
-            # For now we'll filter based on demand field as a placeholder
+        if topics or languages:
+            filter_terms = [t.lower() for t in (topics or [])] + [lang.lower() for lang in (languages or [])]
             self._filtered_projects = [
                 p
                 for p in self._filtered_projects
-                if any(topic in p.demand.lower() for topic in [t.lower() for t in topics])
-            ]
-
-        if languages:
-            # Filter by languages - similar to topics
-            self._filtered_projects = [
-                p
-                for p in self._filtered_projects
-                if any(lang in p.demand.lower() for lang in [lc.lower() for lc in languages])
+                if p.repo in self._summaries
+                and any(term in [t.lower() for t in self._summaries[p.repo].topics] for term in filter_terms)
             ]
 
         if min_size:
@@ -241,6 +239,38 @@ class VolunteerBrowserPanel(Static):
         except Exception:
             # Ignore errors during initial mount
             pass
+
+    def action_join(self) -> None:
+        """Dispatch VolunteerJoinAction for the selected project."""
+        repo = self._get_selected_repo()
+        if repo:
+            self.post_message(VolunteerJoinAction(repo=repo))
+
+    def action_leave(self) -> None:
+        """Dispatch VolunteerLeaveAction for the selected project."""
+        repo = self._get_selected_repo()
+        if repo:
+            self.post_message(VolunteerLeaveAction(repo=repo))
+
+    def on_action_join(self) -> None:
+        """Handle join action."""
+        self.action_join()
+
+    def on_action_leave(self) -> None:
+        """Handle leave action."""
+        self.action_leave()
+
+    def _get_selected_repo(self) -> str | None:
+        """Get the repository URL of the currently selected or highlighted project."""
+        try:
+            list_table = self.query_one("#project-list", DataTable)  # type: ignore
+            if 0 <= list_table.cursor_row < len(self._filtered_projects):
+                return self._filtered_projects[list_table.cursor_row].repo
+        except Exception:
+            pass
+        if self._filtered_projects:
+            return self._filtered_projects[0].repo
+        return None
 
     def _render_details(self, summary: VolunteerStatusSummary) -> None:
         """Render detailed view for a project.
