@@ -1,0 +1,14 @@
+id: inc-e96a74dd9766
+severity: P2
+source_incident: "dlq:2b14386abcf542b9"
+owner: backend
+created_at: 1787941864.395
+expected_outcome: "Agent should complete the task; flake-tolerant retry is acceptable. (root cause: max_retries_exceeded)"
+tags:
+  - max_retries_exceeded
+prompt: |
+  Reproduce and resolve the following terminal failure (role=backend).
+  Task: Add workers=1 enforcement to volunteer hub CLI
+  Failure reason: max_retries_exceeded
+  Last error (trimmed):
+  Agent backend-4808de55 died; janitor failed: ['test_passes: cd /work/proj/.sdd/worktrees/manager-bd17047a && uv run pytest tests/unit/volunteer/test_volunteer_cli.py -x -q (non-zero exit)']
