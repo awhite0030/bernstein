@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 from textual.app import App
 from textual.message import Message
 
 from bernstein.tui.volunteer_browser import (
     VolunteerBrowserPanel,
-    VolunteerProjectEntry,
-    VolunteerStatusSummary,
+    VolunteerFilterChanged,
     VolunteerJoinAction,
     VolunteerLeaveAction,
-    VolunteerFilterChanged,
+    VolunteerProjectEntry,
+    VolunteerStatusSummary,
 )
 
 
@@ -88,7 +90,7 @@ def test_volunteer_project_entry_is_frozen() -> None:
     entry = VolunteerProjectEntry(
         repo="repo", name="name", task_label="label", local_ok=True, demand="demand"
     )
-    with pytest.raises(Exception):  # FrozenInstanceError is a subclass of AttributeError
+    with pytest.raises(FrozenInstanceError):
         entry.repo = "new"  # type: ignore[misc]
 
 
@@ -122,7 +124,7 @@ def test_volunteer_status_summary_is_frozen() -> None:
         repo="repo", name="name", requirements="req", manifest_digest="d",
         allowed_paths=[], egress_hosts=[], topics=[], active_tasks=0, budget_consumption="0%",
     )
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         summary.repo = "new"  # type: ignore[misc]
 
 
@@ -193,7 +195,7 @@ def test_volunteer_browser_panel_initial_state() -> None:
 async def test_update_data_populates_state() -> None:
     """update_data() writes through to _projects, _summaries, _filtered_projects."""
     app = _VolunteerBrowserHarnessApp()
-    async with app.run_test() as pilot:
+    async with app.run_test() as _:
         panel = app.query_one(VolunteerBrowserPanel)
         projects = [_sample_project_entry()]
         summaries = {_sample_project_entry().repo: _sample_status_summary()}
