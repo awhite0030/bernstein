@@ -87,9 +87,7 @@ def test_volunteer_project_entry_dataclass_fields() -> None:
 
 def test_volunteer_project_entry_is_frozen() -> None:
     """VolunteerProjectEntry is frozen and rejects attribute assignment."""
-    entry = VolunteerProjectEntry(
-        repo="repo", name="name", task_label="label", local_ok=True, demand="demand"
-    )
+    entry = VolunteerProjectEntry(repo="repo", name="name", task_label="label", local_ok=True, demand="demand")
     with pytest.raises(FrozenInstanceError):
         entry.repo = "new"  # type: ignore[misc]
 
@@ -121,8 +119,15 @@ def test_volunteer_status_summary_dataclass_fields() -> None:
 def test_volunteer_status_summary_is_frozen() -> None:
     """VolunteerStatusSummary is frozen and rejects attribute assignment."""
     summary = VolunteerStatusSummary(
-        repo="repo", name="name", requirements="req", manifest_digest="d",
-        allowed_paths=[], egress_hosts=[], topics=[], active_tasks=0, budget_consumption="0%",
+        repo="repo",
+        name="name",
+        requirements="req",
+        manifest_digest="d",
+        allowed_paths=[],
+        egress_hosts=[],
+        topics=[],
+        active_tasks=0,
+        budget_consumption="0%",
     )
     with pytest.raises(FrozenInstanceError):
         summary.repo = "new"  # type: ignore[misc]
@@ -165,7 +170,10 @@ def test_volunteer_filter_changed_is_message() -> None:
 def test_volunteer_filter_changed_accepts_none() -> None:
     """VolunteerFilterChanged accepts None for topics and languages."""
     action = VolunteerFilterChanged(
-        topics=None, languages=None, local_ok_only=False, min_size=None,
+        topics=None,
+        languages=None,
+        local_ok_only=False,
+        min_size=None,
     )
     assert action.topics is None
     assert action.languages is None
@@ -258,12 +266,8 @@ async def test_apply_filters_local_ok_only() -> None:
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        local = VolunteerProjectEntry(
-            repo="local", name="Local", task_label="ok", local_ok=True, demand="high"
-        )
-        remote = VolunteerProjectEntry(
-            repo="remote", name="Remote", task_label="ok", local_ok=False, demand="high"
-        )
+        local = VolunteerProjectEntry(repo="local", name="Local", task_label="ok", local_ok=True, demand="high")
+        remote = VolunteerProjectEntry(repo="remote", name="Remote", task_label="ok", local_ok=False, demand="high")
         panel._projects = [local, remote]
         panel._filtered_projects = [local, remote]
 
@@ -285,12 +289,8 @@ async def test_apply_filters_topics_case_insensitive() -> None:
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        py = VolunteerProjectEntry(
-            repo="py", name="Py", task_label="ok", local_ok=True, demand="PYTHON web"
-        )
-        js = VolunteerProjectEntry(
-            repo="js", name="JS", task_label="ok", local_ok=True, demand="javascript node"
-        )
+        py = VolunteerProjectEntry(repo="py", name="Py", task_label="ok", local_ok=True, demand="PYTHON web")
+        js = VolunteerProjectEntry(repo="js", name="JS", task_label="ok", local_ok=True, demand="javascript node")
         panel._projects = [py, js]
         panel._filtered_projects = [py, js]
 
@@ -306,12 +306,8 @@ async def test_apply_filters_languages_case_insensitive() -> None:
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        py = VolunteerProjectEntry(
-            repo="py", name="Py", task_label="ok", local_ok=True, demand="language:Python"
-        )
-        rs = VolunteerProjectEntry(
-            repo="rs", name="RS", task_label="ok", local_ok=True, demand="language:Rust"
-        )
+        py = VolunteerProjectEntry(repo="py", name="Py", task_label="ok", local_ok=True, demand="language:Python")
+        rs = VolunteerProjectEntry(repo="rs", name="RS", task_label="ok", local_ok=True, demand="language:Rust")
         panel._projects = [py, rs]
         panel._filtered_projects = [py, rs]
 
@@ -327,12 +323,8 @@ async def test_apply_filters_min_size_case_insensitive() -> None:
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        large = VolunteerProjectEntry(
-            repo="large", name="L", task_label="ok", local_ok=True, demand="Size: Large"
-        )
-        small = VolunteerProjectEntry(
-            repo="small", name="S", task_label="ok", local_ok=True, demand="size: small"
-        )
+        large = VolunteerProjectEntry(repo="large", name="L", task_label="ok", local_ok=True, demand="Size: Large")
+        small = VolunteerProjectEntry(repo="small", name="S", task_label="ok", local_ok=True, demand="size: small")
         panel._projects = [large, small]
         panel._filtered_projects = [large, small]
 
@@ -348,12 +340,8 @@ async def test_apply_filters_no_filters_keeps_all() -> None:
     app = _VolunteerBrowserHarnessApp()
     async with app.run_test() as pilot:
         panel = app.query_one(VolunteerBrowserPanel)
-        a = VolunteerProjectEntry(
-            repo="a", name="A", task_label="ok", local_ok=True, demand="any"
-        )
-        b = VolunteerProjectEntry(
-            repo="b", name="B", task_label="ok", local_ok=False, demand="other"
-        )
+        a = VolunteerProjectEntry(repo="a", name="A", task_label="ok", local_ok=True, demand="any")
+        b = VolunteerProjectEntry(repo="b", name="B", task_label="ok", local_ok=False, demand="other")
         panel._projects = [a, b]
         panel._filtered_projects = [a, b]
 

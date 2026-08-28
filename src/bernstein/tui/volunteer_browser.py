@@ -193,31 +193,28 @@ class VolunteerBrowserPanel(Static):
         self._filtered_projects = self._projects.copy()
 
         if local_ok_only:
-            self._filtered_projects = [
-                p for p in self._filtered_projects if p.local_ok
-            ]
+            self._filtered_projects = [p for p in self._filtered_projects if p.local_ok]
 
         if topics:
             # Filter by topics - this would need proper integration with manifest data
             # For now we'll filter based on demand field as a placeholder
             self._filtered_projects = [
-                p for p in self._filtered_projects
+                p
+                for p in self._filtered_projects
                 if any(topic in p.demand.lower() for topic in [t.lower() for t in topics])
             ]
 
         if languages:
             # Filter by languages - similar to topics
             self._filtered_projects = [
-                p for p in self._filtered_projects
+                p
+                for p in self._filtered_projects
                 if any(lang in p.demand.lower() for lang in [lc.lower() for lc in languages])
             ]
 
         if min_size:
             # Filter by size - looking in demand field
-            self._filtered_projects = [
-                p for p in self._filtered_projects
-                if min_size.lower() in p.demand.lower()
-            ]
+            self._filtered_projects = [p for p in self._filtered_projects if min_size.lower() in p.demand.lower()]
 
         self.refresh_list()
 
