@@ -385,6 +385,28 @@ async def test_render_details_writes_to_pane() -> None:
 # -----------------------------------------------------------------------
 
 
+def test_default_css_project_list_border_is_solid() -> None:
+    """#project-list uses 'solid' border-right style, not 'slim'."""
+    css = VolunteerBrowserPanel.DEFAULT_CSS
+    assert "#project-list" in css
+    assert "border-right: solid $surface-darken-1" in css
+
+
+def test_default_css_section_title_uses_shorthand_bold_underline() -> None:
+    """.section-title combines bold and underline in text-style shorthand."""
+    css = VolunteerBrowserPanel.DEFAULT_CSS
+    assert ".section-title" in css
+    # New behavior: underline is part of text-style shorthand, not separate text-decoration
+    assert "text-style: bold underline" in css
+
+
+def test_default_css_section_title_has_no_separate_text_decoration() -> None:
+    """.section-title does not use separate text-decoration property."""
+    css = VolunteerBrowserPanel.DEFAULT_CSS
+    # Verify old property is gone
+    assert "text-decoration: underline" not in css
+
+
 def test_default_css_contains_panel_rules() -> None:
     """DEFAULT_CSS defines layout selectors referenced by the panel."""
     css = VolunteerBrowserPanel.DEFAULT_CSS
