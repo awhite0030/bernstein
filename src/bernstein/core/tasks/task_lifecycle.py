@@ -5483,7 +5483,7 @@ def _claim_file_ownership(orch: Any, agent_id: str, tasks: list[Task]) -> None:
         if not all_files:
             continue
         if lock_manager is not None:
-            agent_session = orch._agents.get(agent_id)
+            agent_session = getattr(orch, "_agents", {}).get(agent_id)
             heartbeat_ts = agent_session.heartbeat_ts if agent_session is not None else 0.0
             lock_manager.acquire(
                 all_files,
