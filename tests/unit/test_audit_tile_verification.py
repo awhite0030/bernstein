@@ -88,7 +88,7 @@ def _seal_segments(audit_dir: Path, contents: dict[str, bytes], key: bytes) -> d
     for name in sorted(contents):
         for line in contents[name].splitlines(True):
             entry = json.loads(line)
-            expected = (
+            (
                 log._compute_hmac(  # type: ignore[attr-defined]
                     entry.get("prev_hmac", prev), entry
                 )
