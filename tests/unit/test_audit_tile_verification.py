@@ -149,7 +149,7 @@ def test_hash_mismatch_forces_archived_segment_re_open(tmp_path: Path) -> None:
         # The chain is in the live JSONL; we have to first compress it to
         # the archive subdir to simulate retention having aged it out.
         for jsonl in sorted(audit_dir.glob("*.jsonl")):
-            with jsonl.open("rb") as f_in, gzip.open(archive_dir / jsonl.name + ".gz", "wb") as f_out:
+            with jsonl.open("rb") as f_in, gzip.open(archive_dir / f"{jsonl.name}.gz", "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
             jsonl.unlink()
 
@@ -217,7 +217,7 @@ def test_missing_hash_tile_forces_archived_segment_re_open(tmp_path: Path) -> No
     archive_dir = audit_dir / "archive"
     archive_dir.mkdir(exist_ok=True)
     for jsonl in sorted(audit_dir.glob("*.jsonl")):
-        with jsonl.open("rb") as f_in, gzip.open(archive_dir / jsonl.name + ".gz", "wb") as f_out:
+        with jsonl.open("rb") as f_in, gzip.open(archive_dir / f"{jsonl.name}.gz", "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
         jsonl.unlink()
 

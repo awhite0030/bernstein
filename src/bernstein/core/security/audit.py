@@ -1004,7 +1004,7 @@ def _read_archived_segment(gz_path: Path, errors: list[str]) -> bytes | None:
     try:
         with gzip.open(gz_path, "rb") as fh:
             return fh.read()
-    except (OSError, EOFError) as exc:
+    except (OSError, EOFError, zlib.error) as exc:
         errors.append(f"{gz_path.name}: unreadable archived segment - {exc}")
         return None
 
