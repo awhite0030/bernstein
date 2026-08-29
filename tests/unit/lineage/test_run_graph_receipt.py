@@ -64,6 +64,7 @@ def fixture_setup(tmp_path: Path):
 
     # Generate a signing key pair
     from bernstein.core.lineage.identity import generate_keypair
+
     private_key_pem, public_key_pem = generate_keypair()
 
     return repo_root, lineage_root, _resolver, private_key_pem, public_key_pem
@@ -140,13 +141,15 @@ def test_tampering_one_branch_fails(fixture_setup):
             hex_chars = list(node.spine_head_hash)
             # Flip the first character to make it different
             hex_chars[0] = "f" if hex_chars[0] != "f" else "a"
-            tampered_nodes.append(RunGraphNode(
-                session_id=node.session_id,
-                head_sha=node.head_sha,
-                run_id=node.run_id,
-                spine_head_hash="".join(hex_chars),
-                status=node.status,
-            ))
+            tampered_nodes.append(
+                RunGraphNode(
+                    session_id=node.session_id,
+                    head_sha=node.head_sha,
+                    run_id=node.run_id,
+                    spine_head_hash="".join(hex_chars),
+                    status=node.status,
+                )
+            )
         else:
             tampered_nodes.append(node)
 
@@ -241,6 +244,7 @@ def test_missing_worktree_fails(fixture_setup):
     # Delete one branch's spine (simulate worktree cleanup)
     to_delete = lineage_root / f"run-{RUN_IDS['sess-beta'].split('-')[1]}"
     import shutil
+
     shutil.rmtree(to_delete)
 
     # Verify should fail because the missing worktree causes a graph divergence
