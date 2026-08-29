@@ -174,7 +174,7 @@ def build_run_graph_receipt(
     hmac_key: bytes,
     signing_key_pem: str,
     timestamp: int,
-    head_sha_resolver: Callable[[Path], str | None] = None,
+    head_sha_resolver: Callable[[Path], str | None] | None = None,
 ) -> RunGraphReceipt:
     """Build and seal a run-graph receipt.
 
@@ -239,7 +239,7 @@ def build_run_graph_receipt(
     # Anchor the receipt in the lineage spine
     spine = LineageSpine(lineage_root, run_id=RUN_GRAPH_RECEIPT_RUN_ID, hmac_key=hmac_key)
     artifact_path = f"receipts/{graph.root_hash}.json"
-    anchor = spine.record(
+    spine.record(
         artifact_path=artifact_path,
         content=final_receipt.canonical_bytes(),
         actor=_RECEIPT_ACTOR,
@@ -256,7 +256,7 @@ def verify_run_graph_receipt(
     repo_root: Path,
     lineage_root: Path,
     hmac_key: bytes,
-    head_sha_resolver: Callable[[Path], str | None] = None,
+    head_sha_resolver: Callable[[Path], str | None] | None = None,
 ) -> RunGraphVerifyResult:
     """Verify a run-graph receipt.
 
@@ -313,10 +313,13 @@ def verify_run_graph_receipt(
         # Find the differing node
         for i, (receipt_node, rederived_node) in enumerate(zip(receipt.nodes, rederived_graph.nodes, strict=True)):
             if receipt_node != rederived_node:
+                diverged_reason = (
+                    f"node {i} ({receipt_node.session_id}) diverges: receipt={receipt_node}, rederived={rederived_node}"
+                )
                 return RunGraphVerifyResult(
                     ok=False,
                     status="diverged",
-                    reason=f"node {i} ({receipt_node.session_id}) diverges: receipt={receipt_node}, rederived={rederived_node}",
+                    reason=diverged_reason,
                     receipt=receipt,
                 )
         # If order changed but nodes are same, that's still a failure
@@ -355,11 +358,14 @@ def verify_run_graph_receipt(
                 missing_detail = f" (tampered: {spine_result.errors})"
 
             # For empty spines, report as missing (fail-closed behavior)
+            branch_reason = (
+                f"branch {node.session_id} spine verification failed: {spine_result.status.value}{missing_detail}"
+            )
             if spine_result.status is SpineStatus.NO_ENTRIES:
                 return RunGraphVerifyResult(
                     ok=False,
                     status="missing",
-                    reason=f"branch {node.session_id} spine verification failed: {spine_result.status.value}{missing_detail}",
+                    reason=branch_reason,
                     receipt=receipt,
                 )
             # For other spine status issues, report as diverged
@@ -367,16 +373,20 @@ def verify_run_graph_receipt(
                 return RunGraphVerifyResult(
                     ok=False,
                     status="diverged",
-                    reason=f"branch {node.session_id} spine verification failed: {spine_result.status.value}{missing_detail}",
+                    reason=branch_reason,
                     receipt=receipt,
                 )
 
         # Re-derive the spine's head hash and compare
         if spine.head_hash() != node.spine_head_hash:
+            head_mismatch_reason = (
+                f"branch {node.session_id} spine head hash mismatch: "
+                f"expected={spine.head_hash()}, receipt={node.spine_head_hash}"
+            )
             return RunGraphVerifyResult(
                 ok=False,
                 status="diverged",
-                reason=f"branch {node.session_id} spine head hash mismatch: expected={spine.head_hash()}, receipt={node.spine_head_hash}",
+                reason=head_mismatch_reason,
                 receipt=receipt,
             )
 
@@ -390,11 +400,10 @@ def verify_run_graph_receipt(
 
 
 __all__ = [
-    "RUN_GRAPH_RECEIPT_SCHEMA_VERSION",
     "RUN_GRAPH_RECEIPT_RUN_ID",
+    "RUN_GRAPH_RECEIPT_SCHEMA_VERSION",
     "RunGraphReceipt",
     "RunGraphVerifyResult",
     "build_run_graph_receipt",
     "verify_run_graph_receipt",
 ]
-
