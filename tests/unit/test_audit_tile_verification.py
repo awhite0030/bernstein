@@ -19,8 +19,6 @@ import hashlib
 import json
 from pathlib import Path
 
-import pytest
-
 from bernstein.core.persistence.tiles import (
     generate_tiles,
     has_hash_tile,
@@ -31,7 +29,6 @@ from bernstein.core.security.audit import (
     AuditLog,
     IncrementalVerifyReport,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -91,9 +88,13 @@ def _seal_segments(audit_dir: Path, contents: dict[str, bytes], key: bytes) -> d
     for name in sorted(contents):
         for line in contents[name].splitlines(True):
             entry = json.loads(line)
-            expected = log._compute_hmac(  # type: ignore[attr-defined]
-                entry.get("prev_hmac", prev), entry
-            ) if False else None  # use the AuditLog._verify_log_bytes path? simpler: trust
+            expected = (
+                log._compute_hmac(  # type: ignore[attr-defined]
+                    entry.get("prev_hmac", prev), entry
+                )
+                if False
+                else None
+            )  # use the AuditLog._verify_log_bytes path? simpler: trust
             # The hash is whatever AuditLog mints; we look it up directly by
             # parsing the canonical record. For end_hmac adoption, the tile
             # just needs the last hmac in chain order.
@@ -109,9 +110,7 @@ def _seal_segments(audit_dir: Path, contents: dict[str, bytes], key: bytes) -> d
         tile = read_hash_tile(audit_dir, name) or {}
         tile["end_hmac"] = end_hmac
         # rewrite the tile
-        tile_hash_path(audit_dir, name).write_text(
-            json.dumps(tile, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        tile_hash_path(audit_dir, name).write_text(json.dumps(tile, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return seal
 
 
@@ -276,9 +275,7 @@ def test_hash_tile_with_non_string_sha256_falls_through(tmp_path: Path) -> None:
         "scheme": 2,
     }
     tile_hash_path(audit_dir, name).parent.mkdir(parents=True, exist_ok=True)
-    tile_hash_path(audit_dir, name).write_text(
-        json.dumps(tile_obj, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    tile_hash_path(audit_dir, name).write_text(json.dumps(tile_obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     # The verifier must NOT trust this tile. Because the live segment
     # exists, the verifier reads the live bytes and verifies them.
@@ -289,10 +286,7 @@ def test_hash_tile_with_non_string_sha256_falls_through(tmp_path: Path) -> None:
     # segment, which is intact: the verify succeeds, but the report says
     # the segment was re-read (it could not be trusted).
     assert report.ok, f"verify should succeed: {report.errors}"
-    assert report.segments_re_read >= 1, (
-        "non-string content_sha256 must not be trusted; live segment "
-        "should be re-read"
-    )
+    assert report.segments_re_read >= 1, "non-string content_sha256 must not be trusted; live segment should be re-read"
 
 
 # ---------------------------------------------------------------------------
@@ -341,19 +335,16 @@ def test_incremental_verify_reads_only_changed_tiles(tmp_path: Path) -> None:
     # At most one segment should have been re-read: the one that grew.
     # Bounded by the segments that changed, not by total history.
     assert second.segments_re_read <= 1, (
-        f"incremental verify should re-read <=1 segment after appending to one, "
-        f"got {second.segments_re_read}"
+        f"incremental verify should re-read <=1 segment after appending to one, got {second.segments_re_read}"
     )
     # The other segments must have been trusted by hash.
     assert second.tiles_trusted >= 2, (
-        f"expected the unchanged segments to be trusted by hash, "
-        f"got tiles_trusted={second.tiles_trusted}"
+        f"expected the unchanged segments to be trusted by hash, got tiles_trusted={second.tiles_trusted}"
     )
     # The total tile reads bounded by the number of segments (3), and the
     # segments re-read bounded by what changed (1).
     assert second.tiles_read <= full_tiles_read, (
-        f"incremental tiles_read should not exceed full: "
-        f"{second.tiles_read} vs {full_tiles_read}"
+        f"incremental tiles_read should not exceed full: {second.tiles_read} vs {full_tiles_read}"
     )
 
 
@@ -390,14 +381,9 @@ def test_corrupt_tiled_segment_still_reported(tmp_path: Path) -> None:
     second = log2.verify_incremental()
     # The flipped byte must be detected, not silently passed because the
     # cache 'already saw it'.
-    assert not second.ok, (
-        f"corrupted tile-trusted segment must be reported, got ok=True "
-        f"errors={second.errors}"
-    )
+    assert not second.ok, f"corrupted tile-trusted segment must be reported, got ok=True errors={second.errors}"
     # And the segment was re-read (it could not be trusted by hash anymore).
-    assert second.segments_re_read >= 1, (
-        "corrupted segment must be re-read; cannot be trusted by hash"
-    )
+    assert second.segments_re_read >= 1, "corrupted segment must be re-read; cannot be trusted by hash"
 
 
 def test_incremental_verify_refuses_to_be_weaker_than_full(tmp_path: Path) -> None:
@@ -426,10 +412,7 @@ def test_incremental_verify_refuses_to_be_weaker_than_full(tmp_path: Path) -> No
 
     # The full verify catches it.
     full_ok, full_errors = log.force_full_verify()
-    assert not full_ok, (
-        f"force_full_verify must catch the corruption, got ok=True "
-        f"errors={full_errors}"
-    )
+    assert not full_ok, f"force_full_verify must catch the corruption, got ok=True errors={full_errors}"
 
 
 def test_cache_deletion_costs_time_never_correctness(tmp_path: Path) -> None:

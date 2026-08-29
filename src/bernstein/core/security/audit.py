@@ -1222,8 +1222,12 @@ def _run_incremental_verify(log: AuditLog) -> IncrementalVerifyReport:
     live_files = sorted(log._audit_dir.glob(_JSONL_GLOB))
     if not archived and not live_files:
         report = IncrementalVerifyReport(
-            ok=True, errors=[], tiles_read=0, tiles_trusted=0,
-            segments_re_read=0, run_was_full=True,
+            ok=True,
+            errors=[],
+            tiles_read=0,
+            tiles_trusted=0,
+            segments_re_read=0,
+            run_was_full=True,
         )
         _store_tile_read_count(log._audit_dir, 0)
         return report
@@ -1244,9 +1248,7 @@ def _run_incremental_verify(log: AuditLog) -> IncrementalVerifyReport:
             raw = _read_archived_segment(gz_path, errors)
             if raw is None:
                 break
-            trusted, _sha, _reason = _tile_trusts_content(
-                log._audit_dir, segment_name, on_disk=raw
-            )
+            trusted, _sha, _reason = _tile_trusts_content(log._audit_dir, segment_name, on_disk=raw)
             if trusted:
                 tiles_trusted += 1
                 # Adopt the chain head the prior seal recorded for this
@@ -1279,9 +1281,7 @@ def _run_incremental_verify(log: AuditLog) -> IncrementalVerifyReport:
             if raw is None:
                 errors.append(f"{log_path.name}: segment disappeared during verification")
                 break
-            trusted, _sha, _reason = _tile_trusts_content(
-                log._audit_dir, segment_name, on_disk=raw
-            )
+            trusted, _sha, _reason = _tile_trusts_content(log._audit_dir, segment_name, on_disk=raw)
             if trusted:
                 tiles_trusted += 1
                 tile = read_hash_tile(log._audit_dir, segment_name) or {}
@@ -1304,9 +1304,7 @@ def _run_incremental_verify(log: AuditLog) -> IncrementalVerifyReport:
         if tear.raw_errors:
             hard_errors.extend(tear.raw_errors)
         else:
-            hard_errors.append(
-                f"{tear.describe()} - run 'bernstein audit ack-tear' after investigating"
-            )
+            hard_errors.append(f"{tear.describe()} - run 'bernstein audit ack-tear' after investigating")
 
     report = IncrementalVerifyReport(
         ok=not hard_errors,
