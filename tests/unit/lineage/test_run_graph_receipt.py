@@ -75,7 +75,7 @@ def test_golden_3_branch_receipt_verifies_clean(fixture_setup):
     This is the primary test case that ensures the whole flow works:
     building a receipt and then verifying it should succeed.
     """
-    repo_root, lineage_root, head_sha_resolver, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, head_sha_resolver, private_key_pem, _public_key_pem = fixture_setup
 
     # Build the receipt
     receipt = build_run_graph_receipt(
@@ -119,7 +119,7 @@ def test_tampering_one_branch_fails(fixture_setup):
     This test ensures that signature verification catches changes to spine data
     and properly identifies the offending branch.
     """
-    repo_root, lineage_root, head_sha_resolver, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, head_sha_resolver, private_key_pem, _public_key_pem = fixture_setup
 
     # Build the receipt
     receipt = build_run_graph_receipt(
@@ -183,7 +183,7 @@ def test_empty_fan_out_reports_empty(fixture_setup):
     This test ensures that empty fan-outs are properly handled and don't pass
     verification just because there's nothing to verify.
     """
-    repo_root, lineage_root, head_sha_resolver, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, head_sha_resolver, _private_key_pem, public_key_pem = fixture_setup
 
     # Build a receipt with no nodes (empty fan-out)
     empty_receipt = RunGraphReceipt(
@@ -225,7 +225,7 @@ def test_missing_worktree_fails(fixture_setup):
     This test ensures that when a worktree is cleaned up, the receipt
     verification properly detects the missing branch and fails.
     """
-    repo_root, lineage_root, head_sha_resolver, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, head_sha_resolver, private_key_pem, _public_key_pem = fixture_setup
 
     # Build the receipt
     receipt = build_run_graph_receipt(
@@ -266,7 +266,7 @@ def test_worktree_head_sha_change_fails(fixture_setup):
     This test ensures that changes to the worktree's git HEAD (simulated via
     a custom resolver) are caught and cause verification to fail.
     """
-    repo_root, lineage_root, _, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, _, private_key_pem, _public_key_pem = fixture_setup
 
     # Build the receipt with normal resolver
     normal_receipt = build_run_graph_receipt(
@@ -286,7 +286,7 @@ def test_worktree_head_sha_change_fails(fixture_setup):
         return _resolver(path)
 
     # Re-build the receipt with the altered resolver
-    altered_receipt = build_run_graph_receipt(
+    build_run_graph_receipt(
         repo_root,
         lineage_root,
         RUN_IDS,
@@ -316,7 +316,7 @@ def test_worktree_head_sha_change_fails(fixture_setup):
 
 def test_receipt_serialization_roundtrip(fixture_setup):
     """Test that RunGraphReceipt can be serialized to dict and reconstructed."""
-    repo_root, lineage_root, head_sha_resolver, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, head_sha_resolver, private_key_pem, _public_key_pem = fixture_setup
 
     # Build the receipt
     receipt = build_run_graph_receipt(
@@ -344,7 +344,7 @@ def test_receipt_serialization_roundtrip(fixture_setup):
 
 def test_receipt_without_signature_fails(fixture_setup):
     """A receipt without a valid signature should fail verification."""
-    repo_root, lineage_root, head_sha_resolver, private_key_pem, public_key_pem = fixture_setup
+    repo_root, lineage_root, head_sha_resolver, private_key_pem, _public_key_pem = fixture_setup
 
     # Build the receipt
     receipt = build_run_graph_receipt(
