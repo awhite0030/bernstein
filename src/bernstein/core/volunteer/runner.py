@@ -919,26 +919,31 @@ def _validate_open_source_preflight(repo_url: str, manifest_license: str, adapte
     elif scheme.lower() in {"git", "http", "https", "ssh"}:
         # For remote repositories, we need to verify visibility
         if scheme.lower() in {"https", "http"}:
-            github_match = re.match(r"https?://github\.com/([^/]+/[^/]+)", url)
-            if github_match:
-                repo_path = github_match.group(1)
-                # Use GitHub API to check if repository is public
-                api_url = f"https://api.github.com/repos/{repo_path}"
-                try:
-                    req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        if response.status == 200:
-                            repo_data = json.loads(response.read().decode())
-                            if repo_data.get("private", True):
-                                return "repository is private; volunteer mode only works with public repositories"
-                        elif response.status == 404:
-                            return "repository not found or inaccessible"
-                        else:
-                            # Unexpected status code
-                            return f"unexpected response from repository host: HTTP {response.status}"
-                except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, TimeoutError) as e:
-                    # If we cannot verify visibility, refuse (fail closed)
-                    return f"cannot verify repository visibility: {type(e).__name__}"
+            # Check for GitHub URLs and verify they're public
+            if url.lower().startswith("https://github.com/"):
+                # GitHub repository path
+                repo_path_match = re.match(r"https?://github\.com/([^/]+/[^/]+)/?", url)
+                if repo_path_match:
+                    repo_path = repo_path_match.group(1)
+                    # Use GitHub API to check if repository is public
+                    api_url = f"https://api.github.com/repos/{repo_path}"
+                    try:
+                        req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+                        with urllib.request.urlopen(req, timeout=10) as response:
+                            if response.status == 200:
+                                repo_data = json.loads(response.read().decode())
+                                if repo_data.get("private", True):
+                                    return "repository is private; volunteer mode only works with public repositories"
+                            elif response.status == 404:
+                                return "repository not found or inaccessible"
+                            else:
+                                # Unexpected status code
+                                return f"unexpected response from repository host: HTTP {response.status}"
+                    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, TimeoutError) as e:
+                        # If we cannot verify visibility, refuse (fail closed)
+                        return f"cannot verify repository visibility: {type(e).__name__}"
+                else:
+                    return f"invalid GitHub repository URL: {url}"
             else:
                 # For non-GitHub http/https URLs, we cannot easily verify visibility
                 # so we refuse to be safe (fail closed)
