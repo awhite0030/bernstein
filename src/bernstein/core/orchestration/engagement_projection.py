@@ -138,24 +138,24 @@ def _build_mandate(
 ) -> EngagementMandate:
     """Evaluate whether a phase may run against the given scope.
 
-    A phase is admitted when its ``scope_ref`` is contained within the
-    mandate's ``scope_ref`` or when the mandate covers the broader scope.
-    The check is content-addressed and purely deterministic — no I/O.
+    A phase is admitted when its ``phase_scope_ref`` is contained within the
+    mandate's ``scope`` (or when the mandate is a wildcard). The check is
+    content-addressed and purely deterministic — no I/O.
     """
-    if scope_ref == phase_scope_ref or phase_scope_ref.startswith(scope_ref + ":") or scope_ref == "scope:*":
+    if scope == "scope:*" or scope == phase_scope_ref or phase_scope_ref.startswith(scope + ":"):
         return EngagementMandate(
             playbook_id=playbook_id,
             scope=scope,
             scope_ref=scope_ref,
             admitted=True,
         )
-    # Narrower scope_ref than mandate — refusal receipt
+    # Phase scope not covered by mandate scope — refusal receipt
     return EngagementMandate(
         playbook_id=playbook_id,
         scope=scope,
         scope_ref=scope_ref,
         admitted=False,
-        refusal_reason=f"Phase scope {phase_scope_ref!r} not admitted by mandate {scope_ref!r}",
+        refusal_reason=f"Phase scope {phase_scope_ref!r} not admitted by mandate scope {scope!r}",
     )
 
 
@@ -248,14 +248,14 @@ def project(
             )
         )
 
-    nodes = _canonical_nodes(nodes)
+    sorted_nodes = _canonical_nodes(nodes)
 
     canonical_obj: dict[str, Any] = {
         "rev": ENGAGEMENT_PROJECTION_REV,
         "playbook_id": playbook_id,
         "target_state_snapshot_hash": target_state_snapshot_hash,
         "scope": scope,
-        "nodes": [_node_to_dict(n) for n in nodes],
+        "nodes": [_node_to_dict(n) for n in sorted_nodes],
     }
     canonical_bytes = json.dumps(
         canonical_obj,
@@ -265,7 +265,7 @@ def project(
     graph_hash = hashlib.sha256(canonical_bytes).hexdigest()
 
     return ProjectionResult(
-        nodes=tuple(nodes),
+        nodes=tuple(sorted_nodes),
         graph_hash=graph_hash,
         canonical_bytes=canonical_bytes,
         rev=ENGAGEMENT_PROJECTION_REV,
