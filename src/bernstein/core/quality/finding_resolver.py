@@ -24,7 +24,10 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from bernstein.core.evidence.run_artifacts import (
     ARTIFACT_TYPE_FINDING,
@@ -333,3 +336,4 @@ __all__ = [
     "gate_verify_finding_references",
     "verify_finding_references",
 ]
+
