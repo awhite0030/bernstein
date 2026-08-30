@@ -3,11 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from bernstein.core.security.engagement_mandate import (
-    MandateAction,
     EngagementMandate,
+    MandateAction,
     MandateReceipt,
     check_mandate,
 )
@@ -213,7 +211,7 @@ class TestCheckMandate:
 
     def test_scope_not_covered_returns_admitted_false(self) -> None:
         # Use a mandate that's valid NOW (current wall-clock time) so we can test scope check
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         now = datetime.now(UTC)
         valid_from = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UTC)
         valid_to = datetime(now.year, now.month, now.day, 23, 59, 59, tzinfo=UTC)
@@ -230,7 +228,7 @@ class TestCheckMandate:
         assert "is not covered by mandate scope" in receipt.refusal_reason
 
     def test_action_not_permitted_returns_admitted_false(self) -> None:
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         now = datetime.now(UTC)
         valid_from = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UTC)
         valid_to = datetime(now.year, now.month, now.day, 23, 59, 59, tzinfo=UTC)
@@ -248,7 +246,7 @@ class TestCheckMandate:
         assert "is not permitted" in receipt.refusal_reason
 
     def test_all_checks_pass_returns_admitted_true(self) -> None:
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         now = datetime.now(UTC)
         valid_from = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UTC)
         valid_to = datetime(now.year, now.month, now.day, 23, 59, 59, tzinfo=UTC)
