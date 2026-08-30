@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import tomllib
@@ -49,6 +50,7 @@ from typing import Any, TypedDict, cast
 
 import yaml
 from pydantic import ValidationError
+from scripts.gen_distribution_manifests import PLUGIN_SCHEMA_ID, _schema_errors
 
 from bernstein.core.security.path_containment import (
     PathContainmentError,
@@ -57,6 +59,8 @@ from bernstein.core.security.path_containment import (
 from bernstein.core.skills.lint import LintSeverity, lint_skill
 from bernstein.core.skills.manifest import SkillManifest, parse_skill_md
 from bernstein.core.skills.sanitizer import strip_invisible_tags
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Public constants
@@ -747,11 +751,14 @@ def is_agent_plugins_layout(source: Path) -> bool:
     """Strict Agent Plugins v1.0.0 layout detection.
 
     A directory counts as an Agent Plugins layout only when a root
-    ``plugin.json`` parses with a non-empty ``name`` field and a ``skills``
-    field that resolves to a ``skills/`` subdirectory. Strict by design
-    (#3772 decision): avoids misfiring on unrelated directories that merely
-    happen to contain a ``skills/`` folder. The ``skills`` field must stay
-    inside the plugin root (see :func:`_resolve_plugin_skills_dir`).
+    ``plugin.json`` parses with a non-empty ``name`` field, an optional
+    ``$schema`` field that matches the Agent Plugins 1.0.0 schema URL
+    (``https://agent-plugins.org/schemas/1.0.0/plugin.schema.json``) when
+    present, and a ``skills`` field that resolves to a ``skills/`` subdirectory.
+    Strict by design (#3772, #3540 decision): avoids misfiring on unrelated
+    directories that merely happen to contain a ``skills/`` folder or unknown
+    plugin schema versions. The ``skills`` field must stay inside the plugin
+    root (see :func:`_resolve_plugin_skills_dir`).
     """
     if not source.is_dir():
         return False
@@ -768,6 +775,16 @@ def is_agent_plugins_layout(source: Path) -> bool:
     name = data.get("name")
     if not isinstance(name, str) or not name:
         return False
+    if "$schema" in data:
+        schema_spec = {"const": PLUGIN_SCHEMA_ID}
+        errors = _schema_errors(data["$schema"], schema_spec, schema_spec, path="$.$schema")
+        if errors:
+            logger.debug(
+                "Rejecting %s as Agent Plugins layout: unknown $schema (%s)",
+                source,
+                "; ".join(errors),
+            )
+            return False
     skills_dir = _resolve_plugin_skills_dir(source, data)
     return skills_dir is not None and skills_dir.is_dir()
 
@@ -824,6 +841,13 @@ def install_plugin_local(
             f"{source}: not an Agent Plugins directory layout "
             f"(root {PLUGIN_MANIFEST_FILENAME} with name + skills/ required)"
         )
+    if "$schema" in manifest:
+        schema_spec = {"const": PLUGIN_SCHEMA_ID}
+        errors = _schema_errors(manifest["$schema"], schema_spec, schema_spec, path="$.$schema")
+        if errors:
+            raise SkillLifecycleError(
+                f"{source}: not an Agent Plugins directory layout (unknown $schema: {'; '.join(errors)})"
+            )
     # Resolved once, containment-checked: the same value is used for the
     # walk below and for the lockfile paths, never re-joined from the raw
     # manifest string.

@@ -109,6 +109,44 @@ def test_layout_detection_rejects_invalid_manifest_json(tmp_path: Path) -> None:
     assert is_agent_plugins_layout(root) is False
 
 
+def test_unknown_schema_rejects_plugin(tmp_path: Path) -> None:
+    """An unknown $schema rejects layout detection."""
+    root = tmp_path / "unknown-schema"
+    (root / "skills" / "alpha").mkdir(parents=True)
+    _write_skill(root / "skills" / "alpha" / "SKILL.md", "alpha")
+    (root / "plugin.json").write_text(
+        json.dumps(
+            {
+                "$schema": "https://agent-plugins.org/schemas/9.9.9/plugin.schema.json",
+                "name": "unknown-schema",
+                "version": "1.0.0",
+                "skills": "./skills/",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert is_agent_plugins_layout(root) is False
+
+
+def test_known_schema_accepts_plugin(tmp_path: Path) -> None:
+    """A valid agent-plugins.org 1.0.0 $schema accepts layout detection."""
+    root = tmp_path / "known-schema"
+    (root / "skills" / "alpha").mkdir(parents=True)
+    _write_skill(root / "skills" / "alpha" / "SKILL.md", "alpha")
+    (root / "plugin.json").write_text(
+        json.dumps(
+            {
+                "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+                "name": "known-schema",
+                "version": "1.0.0",
+                "skills": "./skills/",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert is_agent_plugins_layout(root) is True
+
+
 # ---------------------------------------------------------------------------
 # Installation behaviour
 # ---------------------------------------------------------------------------
