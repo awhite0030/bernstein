@@ -248,10 +248,7 @@ class GraphifyCodeGraph:
         for edge in edges:
             src = edge.get("source", "")
             dst = edge.get("target", "")
-            if (
-                (src == symbol_id or dst == symbol_id)
-                and edge.get("origin") != EDGE_ORIGIN_EXTRACTED
-            ):
+            if (src == symbol_id or dst == symbol_id) and edge.get("origin") != EDGE_ORIGIN_EXTRACTED:
                 return True
         return False
 

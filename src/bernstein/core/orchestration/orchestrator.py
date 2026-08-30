@@ -3181,8 +3181,12 @@ class Orchestrator:
             logger.info(
                 "Code graph anchored in audit chain: digest=%s, source=%d, indexed=%d, "
                 "unparsed=%d, inferred=%d, extracted=%d",
-                graph_digest_val[:16], source_count, indexed_count, unparsed_count,
-                inferred_count, extracted_count,
+                graph_digest_val[:16],
+                source_count,
+                indexed_count,
+                unparsed_count,
+                inferred_count,
+                extracted_count,
             )
         except Exception as exc:
             logger.warning("Code graph anchoring failed (non-fatal): %s", sanitize_log(str(exc)))
