@@ -1504,7 +1504,7 @@ def trace_export_cmd(
 
 
 
-@trace_cmd.command("verify-projection")
+@trace_cmd.command("export-projection")
 @click.argument("run_id")
 @click.option(
     "--workdir",
@@ -1521,7 +1521,7 @@ def trace_export_cmd(
     default=None,
     help="Projection path (defaults to .sdd/runs/<run>/projection.otel.json).",
 )
-def trace_verify_projection_cmd(run_id: str, workdir: str, projection_path: str | None) -> None:
+def trace_export_projection_cmd(run_id: str, workdir: str, projection_path: str | None) -> None:
     """Verify ``RUN_ID``'s signed projection and authenticated audit binding.
 
     Rejects a span whose id was altered or whose journal entry hash is absent
