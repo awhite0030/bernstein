@@ -1503,7 +1503,6 @@ def trace_export_cmd(
         click.echo(trust_record_json)
 
 
-
 @trace_cmd.command("export-projection")
 @click.argument("run_id")
 @click.option(
