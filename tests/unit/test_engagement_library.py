@@ -3,18 +3,17 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
 import yaml
 
 from bernstein.core.planning.engagement_library import (
-    ScannerConfig,
+    EngagementLibrary,
     EngagementPhase,
     EngagementPlaybook,
-    EngagementLibrary,
-    load_engagement_library,
+    ScannerConfig,
     _load_playbook_file,
     _parse_phase,
     _parse_scanner_config,
+    load_engagement_library,
 )
 
 # ---------------------------------------------------------------------------
