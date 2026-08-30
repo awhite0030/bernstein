@@ -236,9 +236,7 @@ class HolmesGPTAdapter(CLIAdapter):
         # Create spawn result and set up timeout watchdog
         result = SpawnResult(pid=proc.pid, log_path=log_path, proc=proc)
         if timeout_seconds > 0:
-            result.timeout_timer = self._start_timeout_watchdog(
-                proc.pid, timeout_seconds, session_id
-            )
+            result.timeout_timer = self._start_timeout_watchdog(proc.pid, timeout_seconds, session_id)
         return result
 
     def name(self) -> str:

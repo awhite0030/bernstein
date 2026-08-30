@@ -125,6 +125,7 @@ def test_only_the_computer_use_family_declares_artifact_output_mode() -> None:
 def test_computer_use_declares_artifact_output_mode() -> None:
     assert strategy_for("computer_use").output_mode is OutputMode.ARTIFACT
 
+
 def test_holmesgpt_declares_artifact_output_mode() -> None:
     assert strategy_for("holmesgpt").output_mode is OutputMode.ARTIFACT
 

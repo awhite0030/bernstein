@@ -1,15 +1,13 @@
-import json
 import hashlib
-import os
-from pathlib import Path
+import json
 
 import pytest
 
 # Import the adapter module
-from src.bernstein.adapters.holmesgpt import (
+from bernstein.adapters.holmesgpt import (
+    build_filtered_env,
     parse_output,
     verify_evidence,
-    build_filtered_env,
 )
 
 
@@ -108,7 +106,7 @@ def test_read_only_enforcement(temp_dir, monkeypatch):
         write_called = True
         raise PermissionError("Read-only mode")
 
-    monkeypatch.setattr('src.bernstein.adapters.holmesgpt.write_file', mock_write)
+    monkeypatch.setattr("bernstein.adapters.holmesgpt.write_file", mock_write)
 
     # Create a temporary output file (content irrelevant for this test)
     output_path = temp_dir / "output.json"
