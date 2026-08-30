@@ -863,9 +863,7 @@ def install_plugin_local(
             f"(root {PLUGIN_MANIFEST_FILENAME} with name + skills/ required)"
         )
     if "$schema" not in manifest:
-        raise SkillLifecycleError(
-            f"{source}: not an Agent Plugins directory layout (missing $schema field)"
-        )
+        raise SkillLifecycleError(f"{source}: not an Agent Plugins directory layout (missing $schema field)")
     schema_spec = {"const": PLUGIN_SCHEMA_ID}
     errors = _schema_errors(manifest["$schema"], schema_spec, schema_spec, path="$.$schema")
     if errors:
@@ -1007,9 +1005,7 @@ def _record_plugin_receipts(
 
     plugin_tree_hash = tree_content_hash(plugin_root)
     plugin_tree_manifest_path = plugin_root / PLUGIN_MANIFEST_FILENAME
-    plugin_tree_manifest_hash = hashlib.sha256(
-        plugin_tree_manifest_path.read_bytes()
-    ).hexdigest()
+    plugin_tree_manifest_hash = hashlib.sha256(plugin_tree_manifest_path.read_bytes()).hexdigest()
     plugin_tree_install_id = f"plugin:{plugin_root.name}:tree:{timestamp}"
 
     tree_receipt = InstallReceipt(

@@ -22,7 +22,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
 from scripts.gen_distribution_manifests import PLUGIN_SCHEMA_ID
 
 from bernstein.core.skills.lifecycle import (
@@ -58,9 +57,7 @@ def _write_skill(path: Path, name: str, description: str = "Plugin skill for tes
 def _write_manifest(path: Path, *, name: str, skills: str = "./skills/") -> None:
     """Write a minimal Agent Plugins v1.0.0-style plugin.json."""
     path.write_text(
-        json.dumps(
-            {"$schema": PLUGIN_SCHEMA_ID, "name": name, "version": "1.0.0", "skills": skills}
-        ),
+        json.dumps({"$schema": PLUGIN_SCHEMA_ID, "name": name, "version": "1.0.0", "skills": skills}),
         encoding="utf-8",
     )
 

@@ -12,23 +12,14 @@ import json
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from scripts.gen_distribution_manifests import PLUGIN_SCHEMA_ID
 
+from bernstein.core.security.audit import load_or_create_audit_key
+from bernstein.core.security.audit_chain import AuditChainStore
 from bernstein.core.skills.lifecycle import (
     InstallScope,
-    PluginInstallResult,
-    SkippedSkill,
     install_plugin_local,
-    scope_root,
 )
-from bernstein.core.skills.provenance import (
-    InstallReceipt,
-    write_install_receipt,
-)
-from bernstein.core.security.audit import load_or_create_audit_key
-from bernstein.core.security.audit_chain import AuditChainStore, record_skill_install_receipt
 
 
 def _write_skill(path: Path, name: str, description: str = "Plugin skill for tests.") -> None:
@@ -55,9 +46,7 @@ def _write_skill(path: Path, name: str, description: str = "Plugin skill for tes
 def _write_manifest(path: Path, *, name: str, skills: str = "./skills/") -> None:
     """Write a minimal Agent Plugins v1.0.0-style plugin.json."""
     path.write_text(
-        json.dumps(
-            {"$schema": PLUGIN_SCHEMA_ID, "name": name, "version": "1.0.0", "skills": skills}
-        ),
+        json.dumps({"$schema": PLUGIN_SCHEMA_ID, "name": name, "version": "1.0.0", "skills": skills}),
         encoding="utf-8",
     )
 
@@ -90,14 +79,16 @@ def test_plugin_install_produces_receipts_on_disk(tmp_path: Path) -> None:
 
     # One receipt per installed skill (receipts are named by skill_hash).
     from bernstein.core.skills.provenance import read_install_receipt
+
     for inst_result in result.installed:
         skill_hash = inst_result.digest.digest
         receipt = read_install_receipt(workdir, skill_hash)
         assert receipt is not None, f"Missing receipt for skill {inst_result.name}"
         assert receipt.install_id.startswith("plugin:")
-        assert receipt.manifest_hash == hashlib.sha256(
-            (root / "skills" / inst_result.name / "SKILL.md").read_bytes()
-        ).hexdigest()
+        assert (
+            receipt.manifest_hash
+            == hashlib.sha256((root / "skills" / inst_result.name / "SKILL.md").read_bytes()).hexdigest()
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -109,9 +100,8 @@ def test_plugin_receipt_anchors_to_spine(tmp_path: Path) -> None:
     """Receipt entries are anchored in the install lineage spine."""
     root = _make_plugin_dir(tmp_path)
     workdir = tmp_path / "project"
-    result = install_plugin_local(root, scope=InstallScope.PROJECT, workdir=workdir)
+    install_plugin_local(root, scope=InstallScope.PROJECT, workdir=workdir)
 
-    lineage_root = workdir / ".sdd" / "lineage"
     spine = AuditChainStore(workdir / ".sdd" / "audit", key=load_or_create_audit_key())
     # Receipts were already recorded during install; verify the chain is intact.
     ok, errors = spine.verify()
@@ -127,7 +117,7 @@ def test_audit_chain_event_recorded_for_skill_install(tmp_path: Path) -> None:
     """The audit chain records a ``skill.install_receipt`` event per installed skill."""
     root = _make_plugin_dir(tmp_path)
     workdir = tmp_path / "project"
-    result = install_plugin_local(root, scope=InstallScope.PROJECT, workdir=workdir)
+    install_plugin_local(root, scope=InstallScope.PROJECT, workdir=workdir)
 
     # Check the audit chain
     audit_dir = workdir / ".sdd" / "audit"
@@ -205,6 +195,7 @@ def test_plugin_tree_receipt_anchors_to_spine(tmp_path: Path) -> None:
 
     # Re-read the anchor from the spine and verify it matches.
     from bernstein.core.lineage.spine import LineageSpine
+
     spine = LineageSpine(lineage_root, run_id="skills", hmac_key=load_or_create_audit_key())
     # The spine head hash should match the tree anchor.
     assert spine.head_hash() == tree_anchor
