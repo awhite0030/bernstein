@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 import subprocess
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from bernstein.core.models import ModelConfig
 
 from bernstein.adapters.base import DEFAULT_TIMEOUT_SECONDS, CLIAdapter, SpawnResult, build_worker_cmd
@@ -174,9 +174,6 @@ class GarakAdapter(CLIAdapter):
         if env_key:
             extra_keys = (env_key,)
 
-        # garak version for artifact binding.
-        tool_version = _version_from_pip() or "unknown"
-
         # Build the report filename in the workdir so we can find it after run.
         report_filename = f"garak_attempts_{session_id}.jsonl"
 
@@ -199,10 +196,6 @@ class GarakAdapter(CLIAdapter):
             garak_cmd.extend(["--probes", probes])
         if extra_cli:
             garak_cmd.extend(extra_cli.strip().split())
-
-        # Deterministic argv hash: sorted space-joined for stability.
-        argv_str = " ".join(sorted(garak_cmd))
-        argv_hash = _sha256_hex(argv_str)
 
         pid_dir = workdir / ".sdd" / "runtime" / "pids"
         wrapped_cmd = build_worker_cmd(
@@ -228,19 +221,14 @@ class GarakAdapter(CLIAdapter):
                     start_new_session=True,
                 )
             except FileNotFoundError as exc:
-                msg = (
-                    "garak not found in PATH. Install: pip install garak "
-                    "(see https://github.com/NVIDIA/garak)"
-                )
+                msg = "garak not found in PATH. Install: pip install garak (see https://github.com/NVIDIA/garak)"
                 raise RuntimeError(msg) from exc
             except PermissionError as exc:
                 raise RuntimeError(f"Permission denied executing garak: {exc}") from exc
 
         result = SpawnResult(pid=proc.pid, log_path=log_path, proc=proc)
         if timeout_seconds > 0:
-            result.timeout_timer = self._start_timeout_watchdog(
-                proc.pid, timeout_seconds, session_id
-            )
+            result.timeout_timer = self._start_timeout_watchdog(proc.pid, timeout_seconds, session_id)
         return result
 
     def post_run_summary(
