@@ -110,7 +110,7 @@ class TestPayloadValidation:
 
     def test_report_canonical_bytes_are_stable(self) -> None:
         p = ArtifactPayload.report("# Title\nbody")
-        assert p.canonical_bytes() == b'{"body":"# Title\\nbody","type":"report"}'
+        assert p.canonical_bytes() == b'{"body":"# Title\\nbody","finding_references":[],"type":"report"}'
 
 
 class TestFindingPayload:
