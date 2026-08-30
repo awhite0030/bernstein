@@ -627,6 +627,218 @@ class TestVerifyAll:
         assert all(r.ok for r in results)
 
 
+class TestReportFindingReferencesTamperEvidence:
+    """Tests that report finding-references verification catches tampered/missing receipts."""
+
+    def test_report_finding_refs_passes_when_receipts_intact(self, tmp_path: Path) -> None:
+        """Report passes verification when all referenced findings have valid receipts."""
+        sdd = _sdd(tmp_path)
+        # Post a finding artifact first
+        from bernstein.core.evidence.run_artifacts import ArtifactPayload
+
+        finding_payload = ArtifactPayload.finding(
+            _sarif_result(
+                start_line=8,
+                snippet="eval(user_input)",
+                uri="./src/app.py",
+                rule_id="PY-TAINT-001",
+            ),
+            tool="semgrep",
+            tool_version="1.131.0",
+            pinned_ruleset_or_feed_digest="sha256:" + "a" * 64,
+            invocation_argv_hash="sha256:" + "b" * 64,
+            target="git:0123456789abcdef",
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-123",
+            key="finding",
+            payload=finding_payload,
+            actor="scanner",
+            hmac_key=_KEY,
+        )
+
+        # Post a report referencing the finding with correct hash
+        report_payload = ArtifactPayload.report(
+            "# Audit Report\n\nSee finding [FINDING:task-123:finding:1]",
+            finding_references=[{"task_id": "task-123", "key": "finding", "version": 1}],
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-report",
+            key="audit-report",
+            payload=report_payload,
+            actor="reviewer",
+            hmac_key=_KEY,
+        )
+
+        from bernstein.core.evidence.run_artifacts import verify_run_artifacts
+
+        results = verify_run_artifacts(sdd, "task-report", hmac_key=_KEY)
+        assert len(results) == 1
+        assert results[0].ok, results[0].reason
+
+    def test_report_finding_refs_fails_when_receipt_altered(self, tmp_path: Path) -> None:
+        """Report fails verification when referenced finding receipt has been altered."""
+        sdd = _sdd(tmp_path)
+
+        from bernstein.core.evidence.run_artifacts import ArtifactPayload, read_artifact_rows, verify_run_artifacts
+
+        # Post a finding artifact
+        finding_payload = ArtifactPayload.finding(
+            _sarif_result(
+                start_line=8,
+                snippet="eval(user_input)",
+                uri="./src/app.py",
+                rule_id="PY-TAINT-001",
+            ),
+            tool="semgrep",
+            tool_version="1.131.0",
+            pinned_ruleset_or_feed_digest="sha256:" + "a" * 64,
+            invocation_argv_hash="sha256:" + "b" * 64,
+            target="git:0123456789abcdef",
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-123",
+            key="finding",
+            payload=finding_payload,
+            actor="scanner",
+            hmac_key=_KEY,
+        )
+
+        # Post a report referencing the finding
+        report_payload = ArtifactPayload.report(
+            "# Audit Report\n\nSee finding [FINDING:task-123:finding:1]",
+            finding_references=[{"task_id": "task-123", "key": "finding", "version": 1}],
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-report",
+            key="audit-report",
+            payload=report_payload,
+            actor="reviewer",
+            hmac_key=_KEY,
+        )
+
+        # Now alter the finding's stored blob (flip a byte)
+        rows = read_artifact_rows(sdd, "task-123", verify=False)
+        assert len(rows) == 1
+        rec = rows[0]
+
+        from bernstein.core.evidence.bundle import EvidenceStore
+
+        store = EvidenceStore(sdd / "evidence")
+        blob_path = store.blob_path(rec.content_hash)
+        data = bytearray(blob_path.read_bytes())
+        data[0] ^= 0x01
+        blob_path.write_bytes(bytes(data))
+
+        # Now verify the report - it should fail
+        results = verify_run_artifacts(sdd, "task-report", hmac_key=_KEY)
+        assert len(results) == 1
+        assert not results[0].ok, "Report should fail verification when referenced finding receipt is altered"
+        assert "referenced finding" in results[0].reason
+
+    def test_report_finding_refs_fails_when_receipt_missing(self, tmp_path: Path) -> None:
+        """Report fails verification when referenced finding has no matching receipt."""
+        sdd = _sdd(tmp_path)
+
+        from bernstein.core.evidence.run_artifacts import ArtifactPayload, verify_run_artifacts
+
+        # Post a finding artifact with key "finding"
+        finding_payload = ArtifactPayload.finding(
+            _sarif_result(
+                start_line=8,
+                snippet="eval(user_input)",
+                uri="./src/app.py",
+                rule_id="PY-TAINT-001",
+            ),
+            tool="semgrep",
+            tool_version="1.131.0",
+            pinned_ruleset_or_feed_digest="sha256:" + "a" * 64,
+            invocation_argv_hash="sha256:" + "b" * 64,
+            target="git:0123456789abcdef",
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-123",
+            key="finding",
+            payload=finding_payload,
+            actor="scanner",
+            hmac_key=_KEY,
+        )
+
+        # Post a report referencing a completely different finding key
+        report_payload = ArtifactPayload.report(
+            "# Audit Report\n\nSee finding [FINDING:task-123:wrong-key:1]",
+            finding_references=[{"task_id": "task-123", "key": "wrong-key", "version": 1}],
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-report",
+            key="audit-report",
+            payload=report_payload,
+            actor="reviewer",
+            hmac_key=_KEY,
+        )
+
+        # Verify the report - it should fail because the finding with key "wrong-key" doesn't exist in task-123
+        results = verify_run_artifacts(sdd, "task-report", hmac_key=_KEY)
+        assert len(results) == 1
+        assert not results[0].ok, "Report should fail verification when referenced finding receipt is missing"
+        assert "not found" in results[0].reason
+
+    def test_report_finding_refs_fails_when_wrong_version(self, tmp_path: Path) -> None:
+        """Report fails verification when referenced finding has wrong version."""
+        sdd = _sdd(tmp_path)
+
+        from bernstein.core.evidence.run_artifacts import ArtifactPayload, verify_run_artifacts
+
+        # Post a finding artifact
+        finding_payload = ArtifactPayload.finding(
+            _sarif_result(
+                start_line=8,
+                snippet="eval(user_input)",
+                uri="./src/app.py",
+                rule_id="PY-TAINT-001",
+            ),
+            tool="semgrep",
+            tool_version="1.131.0",
+            pinned_ruleset_or_feed_digest="sha256:" + "a" * 64,
+            invocation_argv_hash="sha256:" + "b" * 64,
+            target="git:0123456789abcdef",
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-123",
+            key="finding",
+            payload=finding_payload,
+            actor="scanner",
+            hmac_key=_KEY,
+        )
+
+        # Post a report referencing the finding with wrong version
+        report_payload = ArtifactPayload.report(
+            "# Audit Report\n\nSee finding [FINDING:task-123:finding:2]",
+            finding_references=[{"task_id": "task-123", "key": "finding", "version": 2}],
+        )
+        post_run_artifact(
+            sdd_dir=sdd,
+            task_id="task-report",
+            key="audit-report",
+            payload=report_payload,
+            actor="reviewer",
+            hmac_key=_KEY,
+        )
+
+        # Verify the report - it should fail because version 2 doesn't exist
+        results = verify_run_artifacts(sdd, "task-report", hmac_key=_KEY)
+        assert len(results) == 1
+        assert not results[0].ok, "Report should fail verification when referenced finding has wrong version"
+        assert "version 2 not found" in results[0].reason
+
+
 class TestTaskIdPathContainment:
     """A task id reaches these readers from a request path, a CLI argument, or
     a journal row, and every one of them turns it into a filesystem path."""

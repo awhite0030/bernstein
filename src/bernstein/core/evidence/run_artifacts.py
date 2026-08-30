@@ -898,13 +898,12 @@ def _verify_finding_references_in_report(
 ) -> str:
     """Verify finding references in a report artifact against the task store.
 
-    Args:
-        blob: The canonical bytes of the report artifact.
-        sdd_dir: The .sdd directory containing the task store.
-        where: Context string for error messages.
-
-    Returns:
-        Empty string if all references verify, otherwise a reason string.
+    Each sidecar entry lists ``{claim -> finding-id -> finding-hash}``. At
+    verify time we re-resolve the referenced finding and recompute its current
+    receipt hash, then compare against the hash the report recorded at build
+    time. Altering the finding receipt *elsewhere* (leaving the report bytes
+    and its recorded hash unchanged) changes the recomputed hash and fails
+    verification -- the design correction from the audit of #2956.
     """
     try:
         content = json.loads(blob)
@@ -920,6 +919,7 @@ def _verify_finding_references_in_report(
             task_id = ref.get("task_id")
             key = ref.get("key")
             version = ref.get("version")
+            recorded_hash = ref.get("finding_hash")
 
             if not isinstance(task_id, str) or not task_id:
                 return f"report finding_reference missing task_id ({where})"
@@ -952,9 +952,25 @@ def _verify_finding_references_in_report(
                     return (
                         f"referenced finding {task_id!r}:{key!r} version {version} not found ({where})"
                     )
+                selected = versioned_rows[0]
             else:
-                # Use latest version - this is fine, no version check needed
-                pass
+                selected = matching_rows[-1]
+
+            # Re-resolve the finding's current receipt hash and compare against
+            # the hash the report recorded at build time. This is what makes
+            # altering a referenced finding receipt *elsewhere* fail: the report
+            # bytes and its recorded hash are unchanged, but the recomputed
+            # hash no longer matches.
+            if isinstance(recorded_hash, str) and recorded_hash:
+                if not recorded_hash.startswith("sha256:"):
+                    return (
+                        f"report finding_reference for {task_id!r}:{key!r} has malformed finding_hash ({where})"
+                    )
+                if selected.content_hash != recorded_hash:
+                    return (
+                        f"referenced finding {task_id!r}:{key!r} receipt hash {selected.content_hash} "
+                        f"does not match report's recorded finding_hash {recorded_hash} ({where})"
+                    )
 
         return ""
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
