@@ -785,6 +785,7 @@ def evaluate_admission(
     # compatibility.
     if last_green_path is not None:
         from .canary import verify_last_green_head
+
         if not verify_last_green_head(last_green_path):
             return _decision(evidence, VERDICT_REFUSE, REASON_PROJECTION_TAMPERED, ttl_seconds)
     return _decision(evidence, VERDICT_ADMIT, "", ttl_seconds)
@@ -1331,7 +1332,11 @@ def preflight_admission(
     )
     stored, problem = load_admission_receipt(receipts_dir, adapter)
     decision = gate_decision(
-        evidence, stored, problem, now=clock, ttl_seconds=ttl_seconds,
+        evidence,
+        stored,
+        problem,
+        now=clock,
+        ttl_seconds=ttl_seconds,
         last_green_path=last_green_path,
     )
 
