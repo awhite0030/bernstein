@@ -803,9 +803,9 @@ def is_agent_plugins_layout(source: Path) -> bool:
         logger.debug(
             "Rejecting %s as Agent Plugins layout: unknown $schema (%s)",
             source,
-                "; ".join(errors),
-            )
-            return False
+            "; ".join(errors),
+        )
+        return False
     skills_dir = _resolve_plugin_skills_dir(source, data)
     return skills_dir is not None and skills_dir.is_dir()
 
@@ -862,13 +862,16 @@ def install_plugin_local(
             f"{source}: not an Agent Plugins directory layout "
             f"(root {PLUGIN_MANIFEST_FILENAME} with name + skills/ required)"
         )
-    if "$schema" in manifest:
-        schema_spec = {"const": PLUGIN_SCHEMA_ID}
-        errors = _schema_errors(manifest["$schema"], schema_spec, schema_spec, path="$.$schema")
-        if errors:
-            raise SkillLifecycleError(
-                f"{source}: not an Agent Plugins directory layout (unknown $schema: {'; '.join(errors)})"
-            )
+    if "$schema" not in manifest:
+        raise SkillLifecycleError(
+            f"{source}: not an Agent Plugins directory layout (missing $schema field)"
+        )
+    schema_spec = {"const": PLUGIN_SCHEMA_ID}
+    errors = _schema_errors(manifest["$schema"], schema_spec, schema_spec, path="$.$schema")
+    if errors:
+        raise SkillLifecycleError(
+            f"{source}: not an Agent Plugins directory layout (unknown $schema: {'; '.join(errors)})"
+        )
     # Resolved once, containment-checked: the same value is used for the
     # walk below and for the lockfile paths, never re-joined from the raw
     # manifest string.
