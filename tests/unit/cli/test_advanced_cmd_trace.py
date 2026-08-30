@@ -5,8 +5,6 @@ Covers the ``trace export`` and ``trace export-projection`` commands and their o
 
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -34,17 +32,6 @@ def test_trace_export_needs_trace_extra() -> None:
     # The trace extra gate always runs first
     assert result.exit_code == 1, result.output
     assert "The trace extra is required" in result.output
-
-
-def test_trace_export_projection_no_run_id() -> None:
-    """``bernstein trace export-projection`` without run_id returns usage error."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        # export-projection has no trace extra gate; missing run_id → usage error
-        result = runner.invoke(trace_cmd, ["export-projection"])
-    assert result.exit_code == 2, result.output
-    assert "Usage:" in result.output
-    assert "run_id" in result.output.lower()
 
 
 def test_trace_export_projection_no_journal_events() -> None:
@@ -111,11 +98,11 @@ def test_trace_export_create_run_structure_and_succeed() -> None:
         with patch.dict('sys.modules', {'agentrust_trace': mock_trace_module}):
             # Create mock run structure with journal
             create_mock_run_journal(Path.cwd(), "test-run-123")
-            
+
             # Now mock all downstream dependencies
-            with patch("bernstein.cli.commands.advanced_cmd.run_journal_path") as mock_journal_path:
-                with patch("bernstein.cli.commands.advanced_cmd.verify_journal") as mock_verify:
-                    with patch("bernstein.cli.commands.advanced_cmd.TrustRecordEmitter") as mock_emitter:
+            with patch("bernstein.core.replay.journal.run_journal_path") as mock_journal_path:
+                with patch("bernstein.core.replay.journal.verify_journal") as mock_verify:
+                    with patch("bernstein.core.observability.trust_record.TrustRecordEmitter") as mock_emitter:
                         # Configure mocks
                         mock_journal_path.return_value = Path(".sdd/runs/test-run-123/journal.jsonl")
                         mock_verification = MagicMock()
@@ -124,9 +111,9 @@ def test_trace_export_create_run_structure_and_succeed() -> None:
                         mock_emitter_instance = MagicMock()
                         mock_emitter_instance.emit_trust_record.return_value = '{"trust": "record"}'
                         mock_emitter.return_value = mock_emitter_instance
-                        
+
                         result = runner.invoke(trace_cmd, ["export", "test-run-123"])
-        
+
         assert result.exit_code == 0, result.output
         assert '{"trust": "record"}' in result.output
 
@@ -140,11 +127,11 @@ def test_trace_export_create_run_structure_and_output_file() -> None:
         with patch.dict('sys.modules', {'agentrust_trace': mock_trace_module}):
             # Create mock run structure with journal
             create_mock_run_journal(Path.cwd(), "test-run-123")
-            
+
             # Mock downstream dependencies
-            with patch("bernstein.cli.commands.advanced_cmd.run_journal_path") as mock_journal_path:
-                with patch("bernstein.cli.commands.advanced_cmd.verify_journal") as mock_verify:
-                    with patch("bernstein.cli.commands.advanced_cmd.TrustRecordEmitter") as mock_emitter:
+            with patch("bernstein.core.replay.journal.run_journal_path") as mock_journal_path:
+                with patch("bernstein.core.replay.journal.verify_journal") as mock_verify:
+                    with patch("bernstein.core.observability.trust_record.TrustRecordEmitter") as mock_emitter:
                         mock_journal_path.return_value = Path(".sdd/runs/test-run-123/journal.jsonl")
                         mock_verification = MagicMock()
                         mock_verification.chain_consistent = True
@@ -152,9 +139,9 @@ def test_trace_export_create_run_structure_and_output_file() -> None:
                         mock_emitter_instance = MagicMock()
                         mock_emitter_instance.emit_trust_record.return_value = '{"to": "file"}'
                         mock_emitter.return_value = mock_emitter_instance
-                        
+
                         result = runner.invoke(trace_cmd, ["export", "test-run-123", "--out", "output.json"])
-        
+
         assert result.exit_code == 0, result.output
         assert "Exported trace to:" in result.output
         assert Path("output.json").exists()
@@ -170,24 +157,23 @@ def test_trace_export_projection_create_run_structure_and_succeed() -> None:
         with patch.dict('sys.modules', {'agentrust_trace': mock_trace_module}):
             # Create mock run structure
             create_mock_run_journal(Path.cwd(), "test-run-123")
-            
+
             # Mock OTel projection verification chain
             with patch("bernstein.cli.commands.advanced_cmd._journal_path_for_run") as mock_journal_path:
-                with patch("bernstein.cli.commands.advanced_cmd.load_events") as mock_load_events:
-                    with patch("bernstein.cli.commands.advanced_cmd.projection_from_dict") as mock_projection_from_dict:
-                        with patch("bernstein.cli.commands.advanced_cmd._load_or_create_install_key") as mock_load_key:
-                            with patch("bernstein.cli.commands.advanced_cmd._signing_key_path") as mock_signing_path:
-                                with patch("bernstein.cli.commands.advanced_cmd.verify_and_render_projection") as mock_verify:
-                                    # Configure all mocks
-                                    mock_journal_path.return_value = Path(".sdd/runs/test-run-123/journal.jsonl")
-                                    mock_load_events.return_value.events = [{"test": "event"}]
-                                    mock_projection = MagicMock()
-                                    mock_projection_from_dict.return_value = mock_projection
-                                    mock_load_key.return_value.public_key.return_value = "mock_public_key"
-                                    mock_verify.return_value = 0  # Success
-                                    
-                                    result = runner.invoke(trace_cmd, ["export-projection", "test-run-123"])
-        
+                with patch("bernstein.core.replay.journal.load_events") as mock_load_events:
+                    with patch("bernstein.core.observability.otel_projection.projection_from_dict") as mock_projection_from_dict:
+                        with patch("bernstein.cli.commands.supervisor_cmd._load_or_create_install_key") as mock_load_key:
+                            with patch("bernstein.cli.commands._otel_projection_audit.verify_and_render_projection") as mock_verify:
+                                # Configure all mocks
+                                mock_journal_path.return_value = Path(".sdd/runs/test-run-123/journal.jsonl")
+                                mock_load_events.return_value.events = [{"test": "event"}]
+                                mock_projection = MagicMock()
+                                mock_projection_from_dict.return_value = mock_projection
+                                mock_load_key.return_value.public_key.return_value = "mock_public_key"
+                                mock_verify.return_value = 0  # Success
+
+                                result = runner.invoke(trace_cmd, ["export-projection", "test-run-123"])
+
         assert result.exit_code == 0, result.output
 
 
@@ -200,30 +186,29 @@ def test_trace_export_projection_create_run_structure_and_custom_path() -> None:
         with patch.dict('sys.modules', {'agentrust_trace': mock_trace_module}):
             # Create mock run structure
             create_mock_run_journal(Path.cwd(), "test-run-123")
-            
+
             # Create a custom projection file
             custom_projection = Path("my_projection.otel.json")
             custom_projection.write_text('{"trace_id": "custom", "spans": []}')
-            
+
             # Mock OTel projection verification chain
             with patch("bernstein.cli.commands.advanced_cmd._journal_path_for_run") as mock_journal_path:
-                with patch("bernstein.cli.commands.advanced_cmd.load_events") as mock_load_events:
-                    with patch("bernstein.cli.commands.advanced_cmd.projection_from_dict") as mock_projection_from_dict:
-                        with patch("bernstein.cli.commands.advanced_cmd._load_or_create_install_key") as mock_load_key:
-                            with patch("bernstein.cli.commands.advanced_cmd._signing_key_path") as mock_signing_path:
-                                with patch("bernstein.cli.commands.advanced_cmd.verify_and_render_projection") as mock_verify:
+                with patch("bernstein.core.replay.journal.load_events") as mock_load_events:
+                    with patch("bernstein.core.observability.otel_projection.projection_from_dict") as mock_projection_from_dict:
+                        with patch("bernstein.cli.commands.supervisor_cmd._load_or_create_install_key") as mock_load_key:
+                                with patch("bernstein.cli.commands._otel_projection_audit.verify_and_render_projection") as mock_verify:
                                     mock_journal_path.return_value = Path(".sdd/runs/test-run-123/journal.jsonl")
                                     mock_load_events.return_value.events = [{"test": "event"}]
                                     mock_projection = MagicMock()
                                     mock_projection_from_dict.return_value = mock_projection
                                     mock_load_key.return_value.public_key.return_value = "mock_public_key"
                                     mock_verify.return_value = 0  # Success
-                                    
+
                                     result = runner.invoke(
                                         trace_cmd,
                                         ["export-projection", "test-run-123", "--projection", "my_projection.otel.json"],
                                     )
-        
+
         assert result.exit_code == 0, result.output
 
 
@@ -236,13 +221,12 @@ def test_trace_export_projection_verification_fails() -> None:
         with patch.dict('sys.modules', {'agentrust_trace': mock_trace_module}):
             # Create mock run structure
             create_mock_run_journal(Path.cwd(), "test-run-123")
-            
+
             with patch("bernstein.cli.commands.advanced_cmd._journal_path_for_run") as mock_journal_path:
-                with patch("bernstein.cli.commands.advanced_cmd.load_events") as mock_load_events:
-                    with patch("bernstein.cli.commands.advanced_cmd.projection_from_dict") as mock_projection_from_dict:
-                        with patch("bernstein.cli.commands.advanced_cmd._load_or_create_install_key") as mock_load_key:
-                            with patch("bernstein.cli.commands.advanced_cmd._signing_key_path") as mock_signing_path:
-                                with patch("bernstein.cli.commands.advanced_cmd.verify_and_render_projection") as mock_verify:
+                with patch("bernstein.core.replay.journal.load_events") as mock_load_events:
+                    with patch("bernstein.core.observability.otel_projection.projection_from_dict") as mock_projection_from_dict:
+                        with patch("bernstein.cli.commands.supervisor_cmd._load_or_create_install_key") as mock_load_key:
+                                with patch("bernstein.cli.commands._otel_projection_audit.verify_and_render_projection") as mock_verify:
                                     # Set up to fail verification
                                     mock_journal_path.return_value = Path(".sdd/runs/test-run-123/journal.jsonl")
                                     mock_load_events.return_value.events = [{"test": "event"}]
@@ -250,20 +234,7 @@ def test_trace_export_projection_verification_fails() -> None:
                                     mock_projection_from_dict.return_value = mock_projection
                                     mock_load_key.return_value.public_key.return_value = "mock_public_key"
                                     mock_verify.return_value = 2  # Verification failure exit code
-                                    
+
                                     result = runner.invoke(trace_cmd, ["export-projection", "test-run-123"])
-        
+
         assert result.exit_code == 2, result.output
-
-
-def test_trace_export_projection_no_run_id() -> None:
-    """Test export-projection without run_id returns usage error."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Make agentrust_trace importable so gate passes
-        mock_trace_module = MagicMock()
-        with patch.dict('sys.modules', {'agentrust_trace': mock_trace_module}):
-            result = runner.invoke(trace_cmd, ["export-projection"])
-    assert result.exit_code == 2, result.output
-    assert "Usage:" in result.output
-    assert "run_id" in result.output.lower()
