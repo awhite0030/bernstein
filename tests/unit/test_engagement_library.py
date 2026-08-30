@@ -377,26 +377,30 @@ class TestParsePhase:
         assert _parse_phase({"name": "Scan", "action": "recon", "scope_ref": "   "}) is None
 
     def test_parses_verification_phase_without_scanners(self) -> None:
-        result = _parse_phase({
-            "name": "Verify",
-            "action": "verify",
-            "scope_ref": "scope:repo",
-        })
+        result = _parse_phase(
+            {
+                "name": "Verify",
+                "action": "verify",
+                "scope_ref": "scope:repo",
+            }
+        )
         assert result is not None
         assert result.name == "Verify"
         assert result.action == "verify"
         assert result.scanners == ()
 
     def test_parses_scanners_for_scanner_action(self) -> None:
-        result = _parse_phase({
-            "name": "Scan",
-            "action": "scanner",
-            "scope_ref": "scope:repo",
-            "scanners": [
-                {"adapter": "adapter1"},
-                {"adapter": "adapter2", "config": {"opt": 1}},
-            ],
-        })
+        result = _parse_phase(
+            {
+                "name": "Scan",
+                "action": "scanner",
+                "scope_ref": "scope:repo",
+                "scanners": [
+                    {"adapter": "adapter1"},
+                    {"adapter": "adapter2", "config": {"opt": 1}},
+                ],
+            }
+        )
         assert result is not None
         assert len(result.scanners) == 2
         assert result.scanners[0].adapter == "adapter1"
@@ -405,37 +409,43 @@ class TestParsePhase:
         assert result.scanners[1].config == {"opt": 1}
 
     def test_ignores_invalid_scanner_configs(self) -> None:
-        result = _parse_phase({
-            "name": "Scan",
-            "action": "scanner",
-            "scope_ref": "scope:repo",
-            "scanners": [
-                {"adapter": "valid"},
-                {"adapter": ""},  # Invalid: empty adapter
-                "not a dict",  # Invalid: not a dict
-            ],
-        })
+        result = _parse_phase(
+            {
+                "name": "Scan",
+                "action": "scanner",
+                "scope_ref": "scope:repo",
+                "scanners": [
+                    {"adapter": "valid"},
+                    {"adapter": ""},  # Invalid: empty adapter
+                    "not a dict",  # Invalid: not a dict
+                ],
+            }
+        )
         assert result is not None
         assert len(result.scanners) == 1
         assert result.scanners[0].adapter == "valid"
 
     def test_parses_config(self) -> None:
-        result = _parse_phase({
-            "name": "Scan",
-            "action": "scanner",
-            "scope_ref": "scope:repo",
-            "config": {"key": "value"},
-        })
+        result = _parse_phase(
+            {
+                "name": "Scan",
+                "action": "scanner",
+                "scope_ref": "scope:repo",
+                "config": {"key": "value"},
+            }
+        )
         assert result is not None
         assert result.config == {"key": "value"}
 
     def test_config_empty_if_not_dict(self) -> None:
-        result = _parse_phase({
-            "name": "Scan",
-            "action": "scanner",
-            "scope_ref": "scope:repo",
-            "config": "not-a-dict",
-        })
+        result = _parse_phase(
+            {
+                "name": "Scan",
+                "action": "scanner",
+                "scope_ref": "scope:repo",
+                "config": "not-a-dict",
+            }
+        )
         assert result is not None
         assert result.config == {}
 
