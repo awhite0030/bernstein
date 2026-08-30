@@ -36,14 +36,29 @@ def test_trace_export_needs_trace_extra() -> None:
     assert "The trace extra is required" in result.output
 
 
-def test_trace_export_projection_needs_trace_extra() -> None:
-    """``bernstein trace export-projection`` should require the trace extra."""
+def test_trace_export_projection_no_run_id() -> None:
+    """``bernstein trace export-projection`` without run_id returns usage error."""
     runner = CliRunner()
     with runner.isolated_filesystem():
-        result = runner.invoke(trace_cmd, ["export-projection", "test-run-123"])
-    # The trace extra gate runs before argument validation
-    assert result.exit_code == 1, result.output
-    assert "The trace extra is required" in result.output
+        # export-projection has no trace extra gate; missing run_id → usage error
+        result = runner.invoke(trace_cmd, ["export-projection"])
+    assert result.exit_code == 2, result.output
+    assert "Usage:" in result.output
+    assert "run_id" in result.output.lower()
+
+
+def test_trace_export_projection_no_journal_events() -> None:
+    """``bernstein trace export-projection`` with no events fails gracefully."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        mock_trace_module = MagicMock()
+        with patch.dict("sys.modules", {"agentrust_trace": mock_trace_module}):
+            # Create empty run directory (no journal.jsonl)
+            runs_dir = Path(".sdd/runs/test-run-123")
+            runs_dir.mkdir(parents=True)
+            result = runner.invoke(trace_cmd, ["export-projection", "test-run-123"])
+        assert result.exit_code == 1, result.output
+        assert "No event journal" in result.output
 
 
 def test_trace_export_missing_run_id_with_trace_extra_mocked() -> None:
