@@ -362,7 +362,7 @@ Bernstein detects stalled agents automatically and retries the task. To check st
 
 ```bash
 bernstein status --mode expert   # Show agent detail, including heartbeats
-bernstein agents showcase        # List available agents grouped by role
+bernstein adapters list        # List available agents grouped by role
 ```
 
 ### "bernstein init fails - not a git repository"
