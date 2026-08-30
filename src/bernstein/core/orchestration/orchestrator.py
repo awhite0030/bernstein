@@ -3140,11 +3140,15 @@ class Orchestrator:
         # This ensures audit-chain integrity for graph-dependent operations
         # and provides a verifiable record of the repository state at run time.
         try:
-            from bernstein.core.knowledge.ast_symbol_graph import build_semantic_graph, graph_digest
-            from bernstein.core.knowledge.ast_symbol_graph import EDGE_ORIGIN_EXTRACTED, EDGE_ORIGIN_INFERRED
-            from bernstein.core.security.audit import load_or_create_audit_key
-            from bernstein.core.security.audit_chain import record_code_graph_anchored, AuditChainStore
+            from bernstein.core.knowledge.ast_symbol_graph import (
+                EDGE_ORIGIN_EXTRACTED,
+                EDGE_ORIGIN_INFERRED,
+                build_semantic_graph,
+                graph_digest,
+            )
             from bernstein.core.orchestration.schedule_projection import SCHEDULE_PROJECTION_REV
+            from bernstein.core.security.audit import load_or_create_audit_key
+            from bernstein.core.security.audit_chain import AuditChainStore, record_code_graph_anchored
 
             # Build the semantic graph once for this run (run-scoped cache)
             graph = build_semantic_graph(self._workdir)
