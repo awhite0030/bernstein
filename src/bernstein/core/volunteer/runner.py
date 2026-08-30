@@ -994,8 +994,6 @@ def _validate_open_source_preflight(repo_url: str, manifest_license: str, adapte
     # without cloning, so we skip this check (best effort)
     return None
 
-    return None
-
 
 def host_git_env(*, home: Path) -> dict[str, str]:
     """The environment for git commands the *host* runs, clone included.
