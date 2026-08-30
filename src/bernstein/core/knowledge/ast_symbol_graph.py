@@ -145,6 +145,7 @@ class SemanticGraph:
     #: Python files actually parsed. Lower than ``source_file_count`` when the
     #: cut applied, which means the graph is missing edges it cannot know about.
     indexed_file_count: int = 0
+    unparsed_files: list[dict[str, str]] = field(default_factory=list)
 
     # Name → symbol ID index for resolution
     _name_index: dict[str, list[str]] = field(default_factory=dict, repr=False)
@@ -514,10 +515,6 @@ def _resolve_call_edge(graph: SemanticGraph, fs: FileSymbols, caller_id: str, ca
     graph.add_edge(SymbolEdge(source=caller_id, target=target, kind=kind, origin=EDGE_ORIGIN_INFERRED))
 
 
-# Module-level cache for run-scoped semantic graph
-_semantic_graph_memo: SemanticGraph | None = None
-
-
 def build_semantic_graph(workdir: Path) -> SemanticGraph:
     """Build a symbol-level semantic graph from all Python files.
 
@@ -526,20 +523,12 @@ def build_semantic_graph(workdir: Path) -> SemanticGraph:
     2. Parse each file -> extract symbols, imports, calls
     3. Resolve call targets -> create edges
 
-    Uses a module-level cache so the indexer runs once per run (not once per task).
-
     Args:
         workdir: Project root directory.
 
     Returns:
         Populated SemanticGraph.
     """
-    global _semantic_graph_memo
-
-    # Return cached graph if available (run-scoped)
-    if _semantic_graph_memo is not None:
-        return _semantic_graph_memo
-
     graph = SemanticGraph()
 
     all_files = _git_ls_files(workdir)
@@ -548,12 +537,8 @@ def build_semantic_graph(workdir: Path) -> SemanticGraph:
     graph.source_file_count = len(all_py_files)
     graph.indexed_file_count = len(py_files)
 
-    # Track unparsed files
-    unparsed_files: list[tuple[str, str]] = []
-
     if not py_files:
         logger.info("No Python files found, returning empty graph")
-        _semantic_graph_memo = graph
         return graph
 
     all_file_symbols: list[FileSymbols] = []
@@ -564,14 +549,11 @@ def build_semantic_graph(workdir: Path) -> SemanticGraph:
             for sym in parsed.symbols:
                 graph.add_node(sym)
         else:
-            unparsed_files.append((fpath, "parse_failed"))
+            graph.unparsed_files.append({"path": fpath, "reason": "parse_failed"})
 
     for fs in all_file_symbols:
         for caller_id, callee_name in fs.calls:
             _resolve_call_edge(graph, fs, caller_id, callee_name)
-
-    # Store unparsed files for coverage reporting
-    graph._unparsed_files = unparsed_files
 
     logger.info(
         "Semantic graph built: %d symbols, %d edges across %d files",
@@ -580,7 +562,6 @@ def build_semantic_graph(workdir: Path) -> SemanticGraph:
         len(graph.file_symbols),
     )
 
-    _semantic_graph_memo = graph
     return graph
 
 
@@ -687,21 +668,14 @@ def graph_document(graph: SemanticGraph) -> bytes:
     Returns:
         UTF-8 canonical JSON. Keys sorted, no insignificant whitespace.
     """
-    # Track unparsed files and edge origins
-    unparsed_files = []
-    inferred_edge_count = 0
-    extracted_edge_count = 0
-    
-    for fs in getattr(graph, '_unparsed_files', []):
-        path, reason = fs
-        unparsed_files.append({"path": path, "reason": reason})
-    
-    for edge in graph.edges:
-        if edge.origin == EDGE_ORIGIN_INFERRED:
-            inferred_edge_count += 1
-        elif edge.origin == EDGE_ORIGIN_EXTRACTED:
-            extracted_edge_count += 1
-    
+    inferred_edge_count = sum(1 for edge in graph.edges if edge.origin == EDGE_ORIGIN_INFERRED)
+    extracted_edge_count = sum(1 for edge in graph.edges if edge.origin == EDGE_ORIGIN_EXTRACTED)
+
+    unparsed_files = [
+        {"path": item["path"], "reason": item["reason"]}
+        for item in sorted(graph.unparsed_files, key=lambda f: (f["path"], f["reason"]))
+    ]
+
     document = {
         "version": GRAPH_DOCUMENT_VERSION,
         "coverage": {
@@ -935,6 +909,14 @@ def graph_from_document(document: bytes) -> SemanticGraph:
         graph.add_edge(edge)
 
     graph.source_file_count, graph.indexed_file_count = _coverage_from_payload(payload)
+
+    raw_unparsed = payload.get("coverage", {}).get("unparsed_files", [])
+    if isinstance(raw_unparsed, list):
+        graph.unparsed_files = [
+            {"path": _entry_str(item, "path"), "reason": _entry_str(item, "reason")}
+            for item in raw_unparsed
+            if isinstance(item, dict)
+        ]
 
     if graph_document(graph) != document:
         raise ValueError("graph document is not the canonical serialisation of the graph it describes")
