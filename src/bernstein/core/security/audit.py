@@ -28,6 +28,7 @@ import shutil
 import stat
 import sys
 import threading
+import zlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
