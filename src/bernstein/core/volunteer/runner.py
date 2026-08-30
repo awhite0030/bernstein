@@ -597,6 +597,7 @@ def run_claimed_task(
         manifest_license=manifest.license,
         manifest_sha256=manifest_sha256,
         comments=comments,
+        adapter_id=adapter_id,
     )
 
     # An abort after a claim was posted releases it; a success leaves the claim
@@ -697,6 +698,7 @@ def _run_sandbox_pipeline(
     manifest_license: str,
     manifest_sha256: str,
     comments: list[dict[str, Any]] | None = None,
+    adapter_id: str | None = None,
 ) -> TaskOutcome:
     """Clone, isolate, spawn under the wall clock, and read the diff.
 
@@ -708,7 +710,7 @@ def _run_sandbox_pipeline(
     # Open-source preflight checks: verify this is a legitimate open-source project
     # before any cloning occurs. This ensures we're running against public repos
     # with proper license declaration and validation.
-    license_problem = _validate_open_source_preflight(task.repo_url, manifest_license)
+    license_problem = _validate_open_source_preflight(task.repo_url, manifest_license, adapter_id)
     if license_problem is not None:
         return refuse(
             RefusalStage.REPO_URL,
@@ -863,32 +865,42 @@ def repo_url_problem(repo_url: str) -> str | None:
     return None
 
 
-def _validate_open_source_preflight(repo_url: str, manifest_license: str) -> str | None:
+def _validate_open_source_preflight(repo_url: str, manifest_license: str, adapter_id: str | None = None) -> str | None:
     """Why this task must not run, based on open-source preflight checks.
 
-    Three checks ensure a volunteer task is running against a legitimate open-source
+    Four checks ensure a volunteer task is running against a legitimate open-source
     project before any cloning occurs:
 
-    1. The repository URL must be public (not internal or private) - determined by
+    1. The adapter's auth_basis must be compatible with volunteer mode (API key or local).
+    2. The repository URL must be public (not internal or private) - determined by
        checking with the repository host, not just URL scheme.
-    2. The manifest's license must be an OSI-approved SPDX identifier.
-    3. The manifest's license must match the detected license file in the
+    3. The manifest's license must be an OSI-approved SPDX identifier.
+    4. The manifest's license must match the detected license file in the
        repository.  A README or LICENSE file carries the project's stated intent,
        and it must agree with the manifest's license field.
 
-    The checks are ordered to fail fast: repository visibility check comes first,
-    then license validation, then LICENSE file detection.
+    The checks are ordered to fail fast: auth_basis check comes first,
+    then repository visibility check, then license validation, then LICENSE file detection.
 
     Args:
         repo_url: The claimed repository URL (trusted at this point).
         manifest_license: The license field from the validated manifest.
+        adapter_id: Optional adapter identifier. When supplied, the runner
+            validates the adapter's auth_basis and refuses volunteer tasks
+            whose auth_basis is incompatible with volunteer mode.
 
     Returns:
         A refusal reason if a check fails, or ``None`` if all pass.
     """
+    # Check 1: Adapter auth_basis must be compatible with volunteer mode
+    if adapter_id:
+        auth_problem = _validate_volunteer_auth_basis(adapter_id)
+        if auth_problem is not None:
+            return auth_problem
+
     from bernstein.core.volunteer.manifest import OSI_APPROVED_LICENSES
 
-    # Check 1: Repository must be public (determined by asking, not parsing)
+    # Check 2: Repository must be public (determined by asking, not parsing)
     url = repo_url.strip()
     if not url:
         return "the repository URL is empty"
@@ -942,13 +954,13 @@ def _validate_open_source_preflight(repo_url: str, manifest_license: str) -> str
             "only public repository schemes (git, http, https, ssh) are allowed"
         )
 
-    # Check 2: Manifest license must be OSI-approved
+    # Check 3: Manifest license must be OSI-approved
     if not manifest_license:
         return "manifest license is required but missing"
     if manifest_license not in OSI_APPROVED_LICENSES:
         return f"license '{manifest_license}' is not OSI-approved"
 
-    # Check 3: LICENSE file detection (if we can get it without cloning)
+    # Check 4: LICENSE file detection (if we can get it without cloning)
     # For public URLs that can be detected without cloning, we can check
     # if it's a GitHub repository and use the GitHub API to detect the license
     if scheme.lower() in {"https", "http"}:
