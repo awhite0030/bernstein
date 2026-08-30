@@ -11,12 +11,9 @@ from bernstein.core.evidence.run_artifacts import (
     post_run_artifact,
 )
 from bernstein.core.quality.finding_resolver import (
-    FindingReference,
-    FindingReferenceReport,
     extract_finding_references,
     verify_finding_references,
 )
-
 
 _KEY = b"artifact-test-hmac-key-0123456789"
 

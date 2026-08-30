@@ -33,7 +33,6 @@ def _load_hmac_key() -> bytes:
 def _render_report_provenance(payload: dict[str, object], sdd: Path) -> None:
     """Render per-claim finding-reference provenance for a report artifact."""
     from bernstein.core.evidence.run_artifacts import ARTIFACT_TYPE_FINDING, read_artifact_rows
-    from bernstein.core.lineage.spine import content_hash_of
 
     finding_refs = payload.get("finding_references", [])
     if not isinstance(finding_refs, list):
@@ -75,7 +74,7 @@ def _render_report_provenance(payload: dict[str, object], sdd: Path) -> None:
                 console.print(f"  [{i + 1}] {task_id}:{key} v{version} NOT FOUND")
                 continue
             finding_hash = selected[0].content_hash
-            if audit_chain := (sdd / "audit").exists():
+            if (sdd / "audit").exists():
                 console.print(f"  [{i + 1}] {task_id}:{key} v{version} -> {finding_hash[:40]}...")
             else:
                 console.print(f"  [{i + 1}] {task_id}:{key} v{version} (hash: {finding_hash[:40]}...)")
