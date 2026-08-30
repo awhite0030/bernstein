@@ -932,16 +932,10 @@ def _verify_finding_references_in_report(
                 return f"referenced finding task {task_id!r} has no artifacts ({where})"
 
             # Filter rows by key and artifact type (finding)
-            matching_rows = [
-                row
-                for row in rows
-                if row.key == key and row.artifact_type == ARTIFACT_TYPE_FINDING
-            ]
+            matching_rows = [row for row in rows if row.key == key and row.artifact_type == ARTIFACT_TYPE_FINDING]
 
             if not matching_rows:
-                return (
-                    f"referenced finding {task_id!r}:{key!r} not found or not a finding artifact ({where})"
-                )
+                return f"referenced finding {task_id!r}:{key!r} not found or not a finding artifact ({where})"
 
             # If version specified, find that exact version
             if version is not None:
@@ -949,9 +943,7 @@ def _verify_finding_references_in_report(
                     return f"referenced finding version must be a positive integer ({where})"
                 versioned_rows = [row for row in matching_rows if row.version == version]
                 if not versioned_rows:
-                    return (
-                        f"referenced finding {task_id!r}:{key!r} version {version} not found ({where})"
-                    )
+                    return f"referenced finding {task_id!r}:{key!r} version {version} not found ({where})"
                 selected = versioned_rows[0]
             else:
                 selected = matching_rows[-1]
@@ -963,9 +955,7 @@ def _verify_finding_references_in_report(
             # hash no longer matches.
             if isinstance(recorded_hash, str) and recorded_hash:
                 if not recorded_hash.startswith("sha256:"):
-                    return (
-                        f"report finding_reference for {task_id!r}:{key!r} has malformed finding_hash ({where})"
-                    )
+                    return f"report finding_reference for {task_id!r}:{key!r} has malformed finding_hash ({where})"
                 if selected.content_hash != recorded_hash:
                     return (
                         f"referenced finding {task_id!r}:{key!r} receipt hash {selected.content_hash} "

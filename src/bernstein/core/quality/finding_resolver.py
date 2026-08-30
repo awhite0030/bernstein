@@ -223,20 +223,14 @@ def _resolve_finding_reference(
             return "unresolved"
 
         # Filter rows by key and artifact type (finding)
-        matching_rows = [
-            row
-            for row in rows
-            if row.key == reference.key and row.artifact_type == ARTIFACT_TYPE_FINDING
-        ]
+        matching_rows = [row for row in rows if row.key == reference.key and row.artifact_type == ARTIFACT_TYPE_FINDING]
 
         if not matching_rows:
             return "unresolved"
 
         # If version specified, find that exact version
         if reference.version is not None:
-            versioned_rows = [
-                row for row in matching_rows if row.version == reference.version
-            ]
+            versioned_rows = [row for row in matching_rows if row.version == reference.version]
             if not versioned_rows:
                 return "unresolved"
         # If we got here, the finding exists
@@ -336,4 +330,3 @@ __all__ = [
     "gate_verify_finding_references",
     "verify_finding_references",
 ]
-
