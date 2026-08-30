@@ -1380,6 +1380,143 @@ def trace_project_cmd(run_id: str, workdir: str, no_stability: bool, as_json: bo
 def trace_verify_projection_cmd(run_id: str, workdir: str, projection_path: str | None) -> None:
     """Verify ``RUN_ID``'s signed projection and authenticated audit binding.
 
+    \b
+    bernstein trace export <RUN_ID> [--out PATH] [--json] [--last]
+
+    Exports the execution evidence for a specific run as a TRACE 0.2
+    Trust Record (JWT-style JSON with an Ed25519 signature). The
+    signature verifies that the on-disk journal chain matches the
+    record's ``subject`` (run/exec split).
+
+    \b
+    --last: scan ``.sdd/runs/`` for directories with a non-empty journal,
+            sort by modification time, and use the newest. Omits the
+            positional RUN_ID.
+    --out: write the canonical JSON string to a file. Default is stdout.
+    --json: currently redundant (the export is always JSON) but kept for
+            future extensibility and consistency with other subcommands.
+    """
+    import json as _json
+
+    # Gate on trace extra
+    try:
+        import agentrust_trace as _trace_lib  # type: ignore[import-untyped,unused-ignore]
+    except ImportError:
+        console.print("[red]The trace extra is required:[/red] pip install bernstein[trace]")
+        raise SystemExit(1)
+
+    # SDD_DIR resolves as: explicit --sdd-dir option if given, else Path(workdir)/.sdd, else Path(.sdd)
+    # Check parent context / options
+    sdd_dir_opt = None
+    if ctx.parent and ctx.parent.params:
+        sdd_dir_opt = ctx.parent.params.get("sdd_dir")
+    if sdd_dir_opt:
+        sdd_path = Path(sdd_dir_opt)
+    else:
+        workdir_opt = None
+        if ctx.parent and ctx.parent.params:
+            workdir_opt = ctx.parent.params.get("workdir")
+        if workdir_opt:
+            sdd_path = Path(workdir_opt) / ".sdd"
+        else:
+            sdd_path = Path(".sdd")
+
+    # Determine the run_id based on the --last flag or the positional argument
+    if latest:
+        runs_dir = sdd_path / "runs"
+        if not runs_dir.exists():
+            console.print(f"[red]No runs directory found under {runs_dir}.[/red]")
+            raise SystemExit(1)
+
+        # Find directories with non-empty journal.jsonl files
+        candidate_dirs = []
+        for item in runs_dir.iterdir():
+            if item.is_dir():
+                journal_file = item / "journal.jsonl"
+                if journal_file.exists() and journal_file.stat().st_size > 0:
+                    candidate_dirs.append(item)
+
+        if not candidate_dirs:
+            console.print(f"[yellow]No finished runs found under {runs_dir}.[/yellow]")
+            raise SystemExit(1)
+
+        # Sort by modification time descending, take the newest
+        latest_dir = max(candidate_dirs, key=lambda p: p.stat().st_mtime_ns)
+        target_run_id = latest_dir.name
+    else:
+        if not run_id:
+            console.print("[red]Usage:[/red] bernstein trace export <RUN_ID> [--out PATH] [--json] [--last]")
+            raise SystemExit(2)
+        target_run_id = run_id
+
+    # Find and verify the journal
+    try:
+        from bernstein.core.replay.journal import JournalPathError, run_journal_path, verify_journal
+
+        journal_path = run_journal_path(sdd_path, target_run_id)
+    except JournalPathError:
+        console.print(f"[red]No such run:[/red] {target_run_id}")
+        raise SystemExit(1)
+
+    if not journal_path.exists():
+        console.print(f"[red]No such run:[/red] {target_run_id}")
+        raise SystemExit(1)
+
+    try:
+        verification = verify_journal(journal_path)
+    except Exception as e:
+        console.print(f"[red]Failed to verify journal:[/red] {e}")
+        raise SystemExit(1)
+
+    if not verification.chain_consistent:
+        console.print(f"[red]Journal chain does not verify:[/red] {target_run_id}")
+        raise SystemExit(1)
+
+    # Generate and emit the trust record
+    from bernstein.core.observability.trust_record import TrustRecordEmitter
+
+    emitter = TrustRecordEmitter()
+    try:
+        trust_record_json = emitter.emit_trust_record(
+            journal_path=journal_path,
+            run_id=target_run_id,
+            exec_id=target_run_id,
+        )
+    except Exception as e:
+        console.print(f"[red]Failed to emit trust record:[/red] {e}")
+        raise SystemExit(1)
+
+    # Output the result
+    if output:
+        Path(output).write_text(trust_record_json, encoding="utf-8")
+        console.print(f"[green]Exported trace to:[/green] {output}")
+    else:
+        if as_json:
+            click.echo(trust_record_json)
+        else:
+            click.echo(trust_record_json)
+
+
+@trace_cmd.command("verify-projection")
+@click.argument("run_id")
+@click.option(
+    "--workdir",
+    "-w",
+    type=click.Path(file_okay=False, exists=True),
+    default=".",
+    show_default=True,
+    help="Project root containing .sdd/.",
+)
+@click.option(
+    "--projection",
+    "projection_path",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Projection path (defaults to .sdd/runs/<run>/projection.otel.json).",
+)
+def trace_verify_projection_cmd(run_id: str, workdir: str, projection_path: str | None) -> None:
+    """Verify ``RUN_ID``'s signed projection and authenticated audit binding.
+
     Rejects a span whose id was altered or whose journal entry hash is absent
     from the chain, confirms the install signature, and authenticates the full
     projection digest against the ``otel.projection`` audit event.
