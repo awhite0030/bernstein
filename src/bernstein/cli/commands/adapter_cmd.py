@@ -270,6 +270,18 @@ def _register_verify_subcommand() -> None:
 _register_verify_subcommand()
 
 
+def _register_onboard_subcommand() -> None:
+    """Attach the probe and onboard subcommand (#3762)."""
+    try:
+        from bernstein.cli.commands.adapters_onboard_cmd import register_adapters_onboard
+    except Exception:  # pragma: no cover -- defensive
+        return
+    register_adapters_onboard(adapters_group)
+
+
+_register_onboard_subcommand()
+
+
 @adapters_group.command("list")
 @click.option(
     "--json",
