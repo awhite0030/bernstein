@@ -2,7 +2,6 @@ import json
 import hashlib
 import os
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -11,7 +10,6 @@ from src.bernstein.adapters.holmesgpt import (
     parse_output,
     verify_evidence,
     build_filtered_env,
-    RunConfigError,
 )
 
 
