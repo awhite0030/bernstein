@@ -1,6 +1,0 @@
-feat: Adapter onboarding CLI command (`bernstein adapters onboard`)
-
-Root cause: Adding an adapter for a CLI binary currently requires writing multiple Python files and recording an evidence transcript by hand, creating a scaling bottleneck. There's no front of the funnel to capture this capability metadata declaratively.
-Fix: Implemented `bernstein adapters onboard <binary>`. It invokes the `probe_cli` engine to introspect the given binary's configuration capabilities (via version, help and completions outputs) and dumps the content-addressed evidence findings to an output directory without evaluating them.
-Validation: Wrote a test `tests/unit/cli/test_adapters_onboard_cmd.py` and executed `uv run ruff check src/`, `uv run lint-imports`, `uv run pyright src/`, and `uv run python scripts/run_tests.py -x`. Output matched expected successfully.
-Fixes https://github.com/sipyourdrink-ltd/bernstein/issues/3544
