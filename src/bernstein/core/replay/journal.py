@@ -96,6 +96,11 @@ _NON_DETERMINISTIC_FIELDS = frozenset({"ts", "elapsed_s", "index", "prev_hash", 
 #: run touched).
 PATH_FIELDS = ("path", "file_path")
 
+#: Journal event recorded for a mid-run correction (issue #3614).
+#: Indicates tasks that are invalidated and dropped from the task graph
+#: without requiring a full restart.
+EVENT_PLAN_AMENDMENT = "plan.amendment"
+
 _GENESIS_HASH = ""
 
 #: A run_id names exactly one journal directory and must be a single safe path
@@ -1309,6 +1314,7 @@ def rebuild_state(path: Path, *, from_step: int) -> dict[str, Any]:
 
 __all__ = [
     "DISPATCH_KNOB_SELECTION_EVENT",
+    "EVENT_PLAN_AMENDMENT",
     "JOURNAL_FILENAME",
     "RETENTION_ENV_VAR",
     "EventJournal",
