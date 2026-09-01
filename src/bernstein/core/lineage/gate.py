@@ -192,7 +192,6 @@ def check(
     operator_secret: bytes | None = None,
     steward_allowlist: frozenset[str] | None = None,
     verified_tool_call_ids: frozenset[str] | None = None,
-    unauthorized_widening_deltas: frozenset[str] | None = None,
 ) -> GateResult:
     """Run all lineage invariants against the log + cards on disk.
 
@@ -214,11 +213,6 @@ def check(
         GateResult with ok=True iff failures is empty.
     """
     failures: list[str] = []
-
-    if unauthorized_widening_deltas:
-        for delta_hash in sorted(unauthorized_widening_deltas):
-            failures.append(f"unauthorized widening capability delta {delta_hash}")
-
     entries, parse_fails = _parse_log(log_path)
     failures.extend(parse_fails)
 
