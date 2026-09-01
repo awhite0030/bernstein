@@ -39,7 +39,7 @@ import hashlib
 import shutil
 from contextlib import ExitStack, suppress
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 from uuid import uuid4
 
 from bernstein.core.agents.computer_use import Action, ActionKind
@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         def dom_snapshot(self, agent_process: object) -> bytes | str: ...
         def current_url(self, agent_process: object) -> str: ...
         def close(self, agent_process: object) -> None: ...
+        def render_probe(self, agent_process: object) -> dict[str, Any]: ...
 
 
 __all__ = [
@@ -193,15 +194,22 @@ class BrowserDriver(Protocol):
 
     def screenshot(self) -> bytes:
         """Return the current viewport screenshot bytes."""
+        ...
 
     def dom_snapshot(self) -> bytes:
         """Return the current DOM / accessibility snapshot bytes."""
+        ...
 
     def current_url(self) -> str:
         """Return the current page URL."""
+        ...
 
     def close(self) -> None:
         """Release the driver. Must be idempotent."""
+
+    def render_probe(self) -> dict[str, Any]:
+        """Capture raw render dump via CDP."""
+        ...
 
 
 def observe(driver: BrowserDriver) -> PageState:
@@ -296,6 +304,11 @@ class RecordedBrowserDriver:
     def close(self) -> None:
         """Mark the driver closed. Idempotent."""
         self.closed = True
+
+    def render_probe(self) -> dict[str, Any]:
+        """Capture raw render dump via CDP."""
+        ...
+        raise NotImplementedError("RecordedBrowserDriver does not support render_probe")
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +444,11 @@ class BrowserUseDriver:
             closer()
         except Exception:
             return
+
+    def render_probe(self) -> dict[str, Any]:
+        """Capture raw render dump via CDP."""
+        ...
+        raise NotImplementedError("BrowserUseDriver does not support render_probe")
 
 
 def browser_use_driver(*, profile_dir: Path) -> BrowserUseDriver:
@@ -653,6 +671,7 @@ class PlaywrightBrowserDriver:
 
     def current_url(self) -> str:
         """Return the current page URL."""
+        ...
         return str(getattr(self.page, "url", ""))
 
     def close(self) -> None:
@@ -669,6 +688,23 @@ class PlaywrightBrowserDriver:
             if stop_pw is not None:
                 with suppress(Exception):
                     stop_pw()
+
+    def render_probe(self) -> dict[str, Any]:
+        """Capture raw render dump via CDP."""
+        ...
+        try:
+            client = self.context.new_cdp_session(self.page)  # type: ignore[attr-defined]
+            # Use empty computedStyles array to capture everything
+            result = cast(Any, client).send("DOMSnapshot.captureSnapshot", {"computedStyles": []})
+            cast(Any, client).detach()
+            if not isinstance(result, dict):
+                raise BrowserDriverError(f"Playwright render_probe returned non-dict: {type(result)}")
+            result = cast("dict[str, Any]", result)
+            return result
+        except Exception as exc:
+            if _is_timeout_error(exc):
+                raise BrowserStepTimeout("Playwright render_probe timed out") from exc
+            raise BrowserDriverError(f"Playwright render_probe failed: {type(exc).__name__}") from exc
 
 
 def _playwright_build_id(context: object, *, browser_type: str) -> str:
@@ -861,7 +897,7 @@ class DesktopSandboxDriver(BrowserDriver):
             if screenshot_method is None:
                 raise BrowserDriverError("Desktop agent does not expose 'screenshot' method")
             raw = screenshot_method()
-            if not isinstance(raw, bytes):
+            if type(raw) is not bytes:  # type: ignore
                 if not raw:
                     raise BrowserDriverError("Desktop agent screenshot returned empty bytes")
                 raw = str(raw).encode("utf-8")
@@ -881,7 +917,7 @@ class DesktopSandboxDriver(BrowserDriver):
             if dom_method is None:
                 raise BrowserDriverError("Desktop agent does not expose 'dom_snapshot' method")
             raw = dom_method()
-            if not isinstance(raw, bytes):
+            if type(raw) is not bytes:  # type: ignore
                 if not raw:
                     raise BrowserDriverError("Desktop agent dom_snapshot returned empty bytes")
                 raw = str(raw).encode("utf-8")
@@ -925,6 +961,11 @@ class DesktopSandboxDriver(BrowserDriver):
         # Teardown the profile directory
         with suppress(Exception):
             shutil.rmtree(self.profile_dir, ignore_errors=True)
+
+    def render_probe(self) -> dict[str, Any]:
+        """Capture raw render dump via CDP."""
+        ...
+        raise NotImplementedError("DesktopSandboxDriver does not support render_probe")
 
 
 def _import_desktop_sandbox() -> object | None:
@@ -1154,13 +1195,13 @@ def _expect_frame(driver: BrowserDriver, expected: PageState, *, phase: str) -> 
         raise ConformanceFailure("current_url", f"{phase}: expected {expected.url!r}, got {url!r}")
 
     dom = driver.dom_snapshot()
-    if not isinstance(dom, bytes) or not dom:
+    if type(dom) is not bytes or not dom:  # type: ignore
         raise ConformanceFailure("dom_snapshot", f"{phase}: returned an empty or non-bytes snapshot")
     if dom != expected.dom:
         raise ConformanceFailure("dom_snapshot", f"{phase}: expected {expected.dom!r}, got {dom!r}")
 
     shot = driver.screenshot()
-    if not isinstance(shot, bytes) or not shot:
+    if type(shot) is not bytes or not shot:  # type: ignore
         raise ConformanceFailure("screenshot", f"{phase}: returned an empty or non-bytes screenshot")
     if shot != expected.screenshot:
         raise ConformanceFailure("screenshot", f"{phase}: expected {expected.screenshot!r}, got {shot!r}")
