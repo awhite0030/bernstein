@@ -143,6 +143,8 @@ def test_render_receipt_empty_defaults() -> None:
     assert receipt.environment is None
     assert receipt.unstable_properties == {}
     assert receipt.property_vocabulary_version == ""
+    assert receipt.input_worktree_hash == ""
+    assert receipt.input_manifest_hash == ""
 
     d = receipt.to_dict()
     assert "receipt_hash" in d
