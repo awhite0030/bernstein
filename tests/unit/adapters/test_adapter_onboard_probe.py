@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from bernstein.adapters.onboarding import probe_cli
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "probe"
 
 
-def _read_evidence(path: Path) -> dict[str, object]:
+def _read_evidence(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 

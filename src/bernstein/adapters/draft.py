@@ -101,7 +101,7 @@ def draft_from_evidence(
 
     # Check required fields
     if required_fields:
-        missing = []
+        missing: list[str] = []
         if "model_flag" in required_fields and model_flag is None:
             missing.append("--model")
         if "prompt_flag" in required_fields and prompt_flag is None:

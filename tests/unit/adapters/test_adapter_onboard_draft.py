@@ -29,8 +29,6 @@ import pytest
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "probe"
 
 
-def _read_evidence(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _load_fixture_help_text(fixture_name: str) -> str:

@@ -29,7 +29,10 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from bernstein.adapters._contract import _run_capture, _sandbox_env
+from bernstein.adapters._contract import (
+    _run_capture,  # type: ignore[reportPrivateUsage]
+    _sandbox_env,  # type: ignore[reportPrivateUsage]
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
