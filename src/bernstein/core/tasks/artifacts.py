@@ -24,13 +24,19 @@ store so it can be imported from both sides without a cycle.
 from __future__ import annotations
 
 import hashlib
-import hmac as _hmac
 import json
-import operator
 import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, cast
+
+from bernstein.core.finding_canonicaliser import (
+    FindingValidationError,
+    build_finding_address_preimage,
+)
+from bernstein.core.finding_canonicaliser import (
+    canonical_json_bytes as _canonical_json_bytes,
+)
 
 
 class ArtifactKind(StrEnum):
@@ -87,7 +93,7 @@ class ArtifactSpecError(ValueError):
 # ---------------------------------------------------------------------------
 
 
-def _canonical_json_bytes(obj: Any) -> bytes:
+def canonical_json_bytes(obj: Any) -> bytes:
     """Shared JSON canonical core: sorted keys, minimal separators, UTF-8.
 
     ``allow_nan=False`` rejects NaN / Infinity, which have no canonical JSON
@@ -152,38 +158,36 @@ def _coerce_rows(raw: Any) -> list[Any]:
 
 def _canonical_finding_bytes(raw: Any) -> bytes:
     """Canonicalise a SARIF 2.1.0 finding artifact for content-addressing.
-    Projects the finding down to stable identity fields, deliberately dropping
-    the raw line number so cosmetic shifts don't change the hash. Binds tool
-    context so the identity is anchored to the exact invocation.
+    Delegates to the stricter, unified implementation from the evidence boundary.
     """
     if not isinstance(raw, dict):
         raise CanonicalisationError(f"finding artifact must be a mapping, got {type(raw).__name__}")
 
-    # Extract SARIF result fields
-    rule_id = str(raw.get("ruleId", ""))
+    raw_dict = cast(dict[str, Any], raw)
+    sarif_result = raw_dict.get("sarif_result", raw_dict)
+    provenance = raw_dict.get("provenance", raw_dict)
 
-    # Normalise artifact location URI to forward slashes
-    artifact_location = raw.get("artifactLocation", {})
-    uri = str(artifact_location.get("uri", "")).replace("\\", "/")
+    if not isinstance(sarif_result, dict):
+        raise CanonicalisationError("finding payload is missing required field sarif_result or it is not a dict")
+    if not isinstance(provenance, dict):
+        raise CanonicalisationError("finding payload is missing required field provenance or it is not a dict")
 
-    # Hash the snippet text instead of using the raw line number
-    region = raw.get("region", {})
-    snippet_text = str(region.get("snippet", {}).get("text", ""))
-    snippet_hash = "sha256:" + hashlib.sha256(snippet_text.encode("utf-8")).hexdigest()
+    typed_sarif_result = cast(dict[str, Any], sarif_result)
+    typed_provenance = cast(dict[str, Any], provenance)
 
-    # Bind context fields required by the issue
-    projected = {
-        "ruleId": rule_id,
-        "uri": uri,
-        "snippet_hash": snippet_hash,
-        "tool": str(raw.get("tool", "")),
-        "tool_version": str(raw.get("tool_version", "")),
-        "pinned_digest": str(raw.get("pinned_digest", "")),
-        "invocation_argv_hash": str(raw.get("invocation_argv_hash", "")),
-        "target": str(raw.get("target", "")),
-    }
+    try:
+        content = build_finding_address_preimage(
+            typed_sarif_result,
+            tool=str(typed_provenance.get("tool", "")),
+            tool_version=str(typed_provenance.get("tool_version", "")),
+            pinned_ruleset_or_feed_digest=str(typed_provenance.get("pinned_ruleset_or_feed_digest", "")),
+            invocation_argv_hash=str(typed_provenance.get("invocation_argv_hash", "")),
+            target=str(typed_provenance.get("target", "")),
+        )
+    except FindingValidationError as exc:
+        raise CanonicalisationError(str(exc)) from exc
 
-    return _canonical_json_bytes(projected)
+    return _canonical_json_bytes(content)
 
 
 def canonicalise_artifact(kind: ArtifactKind | str, raw: Any) -> bytes:
@@ -197,9 +201,9 @@ def canonicalise_artifact(kind: ArtifactKind | str, raw: Any) -> bytes:
         return _canonical_text_bytes(_coerce_text(raw))
     if k in _JSONL_KINDS:
         rows = _coerce_rows(raw)
-        return b"\n".join(_canonical_json_bytes(row) for row in rows)
+        return b"\n".join(canonical_json_bytes(row) for row in rows)
     if k in _JSON_OBJECT_KINDS:
-        return _canonical_json_bytes(raw)
+        return canonical_json_bytes(raw)
     if k in _BYTE_KINDS:
         if isinstance(raw, bytes):
             return raw
@@ -248,39 +252,26 @@ def evaluate_criterion(
 ) -> tuple[bool, str]:
     """Evaluate one typed artifact criterion against ``artifact``.
 
-    * ``hash_stable`` - re-canonicalise ``artifact`` and compare its content
-      hash to ``criterion_value`` (an expected ``sha256:...`` string).
-    * ``schema_valid`` - validate the artifact's JSON document against the JSON
-      Schema in ``criterion_value``; JSONL kinds validate each row.
-    * ``criteria_match`` - evaluate a closed predicate set (JSON in
-      ``criterion_value``) over the artifact's JSON document.
-
-    Returns ``(passed, detail)``. An unknown criterion type returns
-    ``(False, ...)`` rather than raising so a caller can evaluate a mixed list
-    without a guard at every call site.
+    Raises :class:`CanonicalisationError` when the artifact is malformed for
+    the kind before the criterion logic runs.
     """
-    k = ArtifactKind(kind)
     if criterion_type == "hash_stable":
-        expected = criterion_value.strip()
-        try:
-            actual = artifact_content_hash(k, artifact)
-        except CanonicalisationError as exc:
-            return False, f"artifact does not canonicalise: {exc}"
-        ok = _hmac.compare_digest(actual, expected)
-        return ok, ("hash stable" if ok else f"hash drift: expected {expected}, got {actual}")
+        # Any artifact kind can evaluate hash_stable, even blobs
+        return _eval_hash_stable(kind, artifact, criterion_value)
+
+    # schema_valid and criteria_match only work on parsed JSON documents
+    if kind in _BYTE_KINDS:
+        return False, f"criterion type {criterion_type!r} is not supported for blob kind"
+
     if criterion_type == "schema_valid":
-        return _eval_schema_valid(k, artifact, criterion_value)
+        return _eval_schema_valid(kind, artifact, criterion_value)
     if criterion_type == "criteria_match":
-        return _eval_criteria_match(k, artifact, criterion_value)
-    return False, f"not an artifact criterion type: {criterion_type!r}"
+        return _eval_criteria_match(kind, artifact, criterion_value)
+    raise ValueError(f"unknown artifact criterion type {criterion_type!r}")
 
 
 def _json_document_for(kind: ArtifactKind, artifact: Any) -> Any:
-    """Canonicalise ``artifact`` under ``kind`` and parse its JSON document.
-
-    Raises :class:`CanonicalisationError` for text kinds (no JSON document) or
-    when the artifact does not canonicalise under the kind's rule.
-    """
+    """Return the JSON document (parsed from canonical bytes) for an artifact."""
     canonical = canonicalise_artifact(kind, artifact)
     return _parse_json_document(kind, canonical)
 
@@ -312,133 +303,183 @@ def _eval_schema_valid(kind: ArtifactKind, artifact: Any, schema_text: str) -> t
         return True, f"all {len(doc)} row(s) valid"
     errors = sorted(validator.iter_errors(doc), key=lambda e: list(e.path))
     if errors:
-        return False, f"artifact fails schema: {errors[0].message}"
-    return True, "schema valid"
+        return False, f"fails schema: {errors[0].message}"
+    return True, "valid"
 
 
-def _eval_criteria_match(kind: ArtifactKind, artifact: Any, preds_text: str) -> tuple[bool, str]:
-    # Blob kind cannot be matched against JSON criteria
-    if kind in _BYTE_KINDS:
-        return False, "criterion type 'criteria_match' is not supported for blob kind"
+def _eval_hash_stable(kind: ArtifactKind, artifact: Any, expected_hash: str) -> tuple[bool, str]:
+    if not expected_hash.startswith("sha256:"):
+        return False, "criterion value must be a sha256: content hash"
+    actual = artifact_content_hash(kind, artifact)
+    if actual != expected_hash:
+        return False, f"got {actual}, expected {expected_hash}"
+    return True, "matches"
 
+
+def _eval_criteria_match(kind: ArtifactKind, artifact: Any, expr_text: str) -> tuple[bool, str]:
+    import boolean
+
+    algebra = boolean.BooleanAlgebra()
     try:
-        preds = json.loads(preds_text)
-    except json.JSONDecodeError as exc:
-        return False, f"criteria set is not valid JSON: {exc}"
-    if not isinstance(preds, list):
-        return False, "criteria set must be a JSON list of predicates"
+        expr = algebra.parse(expr_text)
+    except boolean.ParseError as exc:
+        return False, f"criterion value is not a valid boolean expression: {exc}"
+
     try:
         doc = _json_document_for(kind, artifact)
     except CanonicalisationError as exc:
-        return False, f"artifact has no JSON document to match: {exc}"
-    for i, pred in enumerate(preds):
-        if not isinstance(pred, dict):
-            return False, f"predicate {i} must be a mapping"
-        op = pred.get("op")
-        if op not in _ALLOWED_OPS:
-            return False, f"predicate {i} has unknown op {op!r}"
-        path = str(pred.get("path", ""))
-        found, actual = _resolve_path(doc, path)
-        ok, detail = _apply_op(str(op), found, actual, pred.get("value"))
-        if not ok:
-            return False, f"predicate {i} ({op} {path!r}) failed: {detail}"
-    return True, f"all {len(preds)} predicate(s) matched"
+        return False, f"artifact has no JSON document to evaluate: {exc}"
+
+    docs = doc if kind in _JSONL_KINDS else [doc]
+
+    # Evaluate the expression against every row/document. They all must match.
+    for i, cur in enumerate(docs):
+        # A flat dictionary of leaf terms ("foo.bar eq baz" -> True/False)
+        # populated strictly on demand.
+        results: dict[boolean.Symbol, boolean.Symbol] = {}
+
+        def _resolve_leaf(sym: boolean.Symbol) -> boolean.Symbol:
+            if sym in results:
+                return results[sym]
+            ok, reason = _eval_leaf_predicate(sym.obj, cur)
+            resolved = algebra.TRUE if ok else algebra.FALSE
+            results[sym] = resolved
+            return resolved
+
+        final = expr.subs(_resolve_leaf)
+        if final != algebra.TRUE:
+            # Re-evaluate the failing row to find the first false leaf to
+            # report, because `subs` evaluation order is internal to the AST.
+            for sym in expr.symbols:
+                ok, reason = _eval_leaf_predicate(sym.obj, cur)
+                if not ok:
+                    prefix = f"row {i} " if kind in _JSONL_KINDS else ""
+                    return False, f"{prefix}fails predicate {sym.obj!r}: {reason}"
+            return False, f"row {i} fails expression"
+
+    return True, "matches"
 
 
-def _resolve_path(doc: Any, path: str) -> tuple[bool, Any]:
-    """Resolve a dotted path (dict keys, list indices) into ``doc``.
+def _eval_leaf_predicate(expr: Any, doc: Any) -> tuple[bool, str]:
+    if not isinstance(expr, str):
+        return False, "predicate must be a string"
+    parts = expr.split(" ", 2)
+    if len(parts) == 1:
+        path, op, expected = parts[0], "exists", ""
+    elif len(parts) == 3:
+        path, op, expected = parts
+    else:
+        return False, f"malformed predicate: {expr!r}"
 
-    Returns ``(found, value)``; ``found`` is ``False`` when any segment does
-    not resolve. An empty path resolves to the document itself.
-    """
-    if path == "":
-        return True, doc
-    cur = doc
-    for seg in path.split("."):
-        if isinstance(cur, dict):
-            if seg not in cur:
-                return False, None
-            cur = cur[seg]
-        elif isinstance(cur, list):
-            try:
-                idx = int(seg)
-            except ValueError:
-                return False, None
-            if idx < 0 or idx >= len(cur):
-                return False, None
-            cur = cur[idx]
-        else:
-            return False, None
-    return True, cur
+    if op not in _ALLOWED_OPS:
+        return False, f"unknown operator {op!r} (allowed: {', '.join(sorted(_ALLOWED_OPS))})"
 
+    try:
+        actual = _resolve_json_path(doc, path)
+    except KeyError:
+        return False, f"path {path!r} not found"
 
-def _apply_op(op: str, found: bool, actual: Any, expected: Any) -> tuple[bool, str]:
     if op == "exists":
-        want = True if expected is None else bool(expected)
-        return (found == want), f"exists={found}"
-    if not found:
-        return False, "path not found"
-    if op == "eq":
-        return actual == expected, f"{actual!r} == {expected!r}"
-    if op == "ne":
-        return actual != expected, f"{actual!r} != {expected!r}"
-    if op == "contains":
+        return True, "exists"
+
+    # Coerce both sides to float if possible for numeric operators
+    def coerce(val: str | int | float) -> float | str:
         try:
-            return (expected in actual), f"{expected!r} in {actual!r}"
+            return float(val)
+        except (ValueError, TypeError):
+            return str(val)
+
+    if op in {"gt", "ge", "lt", "le"}:
+        left = coerce(actual)
+        right = coerce(expected)
+        try:
+            if op == "gt":
+                return left > right, "matches"  # type: ignore
+            if op == "ge":
+                return left >= right, "matches"  # type: ignore
+            if op == "lt":
+                return left < right, "matches"  # type: ignore
+            if op == "le":
+                return left <= right, "matches"  # type: ignore
         except TypeError:
-            return False, "value is not a container"
-    # Numeric comparisons; reject bool (a bool is an int subclass) and non-numbers.
-    if isinstance(actual, bool) or isinstance(expected, bool):
-        return False, "numeric comparison on a boolean"
-    if not isinstance(actual, (int, float)) or not isinstance(expected, (int, float)):
-        return False, "numeric comparison on a non-number"
-    cmp = {"gt": operator.gt, "ge": operator.ge, "lt": operator.lt, "le": operator.le}[op]
-    return cmp(actual, expected), f"{actual!r} {op} {expected!r}"
+            return False, f"cannot compare {type(left).__name__} and {type(right).__name__}"
+
+    str_actual = str(actual)
+    if op == "eq":
+        if str_actual != expected:
+            return False, f"got {str_actual!r}, expected {expected!r}"
+        return True, "matches"
+    if op == "ne":
+        if str_actual == expected:
+            return False, f"got {str_actual!r}, which equals {expected!r}"
+        return True, "matches"
+    if op == "contains":
+        if expected not in str_actual:
+            return False, f"got {str_actual!r}, which does not contain {expected!r}"
+        return True, "matches"
+
+    return False, f"unimplemented operator {op!r}"
+
+
+def _resolve_json_path(doc: Any, path: str) -> Any:
+    """Traverse a dotted path in a JSON document, arrays indexed by integer."""
+    cur = doc
+    for part in path.split("."):
+        if isinstance(cur, list):
+            try:
+                idx = int(part)
+                cur = cur[idx]
+            except (ValueError, IndexError) as exc:
+                raise KeyError(part) from exc
+        elif isinstance(cur, dict):
+            if part not in cur:
+                raise KeyError(part)
+            cur = cur[part]
+        else:
+            raise KeyError(part)
+    return cur
 
 
 # ---------------------------------------------------------------------------
-# Typed spec dataclasses
+# Declarative Artifact Contract (parseable from YAML / server payload)
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ArtifactCriterion:
-    """One typed verification criterion evaluated against artifact bytes.
-
-    Mirrors the ``{type, value}`` shape of :class:`CompletionSignal` but is
-    closed to the three artifact criterion types so an :class:`ArtifactSpec`
-    never carries a filesystem-oriented signal.
-    """
+    """A typed criterion the agent's deliverable must pass to be accepted."""
 
     type: Literal["schema_valid", "criteria_match", "hash_stable"]
     value: str
-
-    def __post_init__(self) -> None:
-        if self.type not in ARTIFACT_CRITERION_TYPES:
-            raise ValueError(f"unknown artifact criterion type: {self.type!r}")
 
     def to_dict(self) -> dict[str, str]:
         return {"type": self.type, "value": self.value}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ArtifactCriterion:
-        return cls(type=str(data["type"]), value=str(data["value"]))  # type: ignore[arg-type]
-
-    def evaluate(self, *, artifact: Any, kind: ArtifactKind | str) -> tuple[bool, str]:
-        """Evaluate this criterion against ``artifact`` under ``kind``."""
-        return evaluate_criterion(self.type, self.value, artifact=artifact, kind=kind)
+        return cls(type=str(data.get("type")), value=str(data.get("value")))  # type: ignore[arg-type]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ArtifactSpec:
-    """Declared artifact contract for a task: kind, canonicalisation, criteria.
+    """The contract governing the output of an artifact-producing task (#2608).
 
-    Defaults to ``code_diff`` so an existing coding task that carries no spec is
-    unchanged. ``canonicalisation`` names the serialisation rule; an empty
-    string means "the kind's default rule" (see :attr:`canonical_rule`).
+    Where a coding task completes on a git SHA, an artifact task completes on a
+    content hash (see :class:`bernstein.core.lineage.spine.LineageSpine`). This
+    spec defines what kind of artifact the agent must write and what validation
+    rules it must pass before the completion path will accept it.
 
-    ``output_path`` is the workdir-relative POSIX path the agent writes its
-    produced artifact to. It is what makes an artifact-mode task *executable*:
+    This spec is the only source of truth for the task's deliverable format. It
+    is parsed strictly from the operator's declaration (CLI flags or backlog
+    frontmatter) via :func:`parse_artifact_spec` and frozen into the task plan.
+
+    :attr:`kind` defines the expected shape (e.g. ``dataset``, ``report``).
+    :attr:`canonicalisation` overrides the default byte-normalisation rule.
+    :attr:`criteria` is a list of deterministic tests (e.g. JSON schema) that
+    the canonicalised artifact bytes must pass.
+
+    :attr:`output_path` is the workdir-relative location the agent must write
+    the artifact to. It is what makes an artifact-mode task *executable*:
     the completion path reads those bytes, canonicalises them under
     :attr:`kind`, and records the signed lineage entry that stands in for the
     git SHA a coding task would have produced. An empty string selects the
