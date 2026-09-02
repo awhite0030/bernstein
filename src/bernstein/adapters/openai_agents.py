@@ -244,7 +244,7 @@ class OpenAIAgentsAdapter(PluginAdapter):
         # explicit ``tool_source`` (an explicit value - builtin or not -
         # always wins over the environment).
         _env_tool_source_value = os.environ.get(TOOL_SOURCE_ENV_VAR)
-        _mcp_config_has_tool_source_key = bool(mcp_config) and "tool_source" in mcp_config
+        _mcp_config_has_tool_source_key = bool(mcp_config) and "tool_source" in mcp_config  # type: ignore[operator]
         _env_lever_applies = not _mcp_config_has_tool_source_key and _env_tool_source_value == "builtin"
         if _env_lever_applies:
             tool_source = "builtin"

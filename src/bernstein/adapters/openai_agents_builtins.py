@@ -696,7 +696,7 @@ def run_command_in_workdir(
         }
     )
 
-    if is_shell_form:
+    if isinstance(argv, str):
         command_str = argv
         if not command_str.strip():
             logger.info(
@@ -938,7 +938,7 @@ def build_builtin_tools(
     Raises:
         ImportError: The ``openai-agents`` SDK is not installed.
     """
-    from agents import function_tool  # type: ignore[import-not-found]
+    from agents import function_tool  # type: ignore[import-not-found, attr-defined]
 
     @function_tool
     def read_file(path: str) -> str:

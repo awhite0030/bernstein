@@ -144,7 +144,7 @@ def _build_member_model_settings(agent: Any, member: dict[str, Any], *, label: s
         caller should omit ``model_settings`` entirely so ``clone()`` keeps
         the base agent's settings unchanged).
     """
-    from agents import ModelSettings  # type: ignore[import-not-found]
+    from agents import ModelSettings  # type: ignore[import-not-found, attr-defined]
 
     from bernstein.adapters.openai_agents_runner import (
         _inject_alibaba_enable_thinking,
@@ -190,7 +190,7 @@ async def _run_candidate(
         in) is returned separately so the caller can attribute cost
         accounting to it - see ``CouncilRunResult.member_usage``.
     """
-    from agents import OpenAIChatCompletionsModel, Runner  # type: ignore[import-not-found]
+    from agents import OpenAIChatCompletionsModel, Runner  # type: ignore[import-not-found, attr-defined]
     from openai import AsyncOpenAI  # type: ignore[import-not-found]
 
     model_id = member.get("model")
@@ -306,7 +306,7 @@ async def _run_judge(
     Returns:
         The judge's ``RunResult``.
     """
-    from agents import OpenAIChatCompletionsModel, Runner  # type: ignore[import-not-found]
+    from agents import OpenAIChatCompletionsModel, Runner  # type: ignore[import-not-found, attr-defined]
     from openai import AsyncOpenAI  # type: ignore[import-not-found]
 
     model_id = judge_member.get("model")
