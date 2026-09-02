@@ -1,0 +1,9 @@
+fix: core volunteer module must not import github_app
+
+Root cause: src/bernstein/core/volunteer/verification_check_run.py imported CheckRunClient from bernstein.core.github_app.check_runs, but core must not import from adapters, which broke the architecture contract.
+
+Fix: Change the import to from bernstein.github_app.check_runs import CheckRunClient and only under TYPE_CHECKING.
+
+Validation: uv run lint-imports passes and tests pass.
+
+Fixes https://github.com/sipyourdrink-ltd/bernstein/issues/3877
