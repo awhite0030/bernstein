@@ -1357,6 +1357,7 @@ _PROFILE_LIST: tuple[AdapterCapabilityProfile, ...] = (
         local_models=True,
         resume=ResumeStrategy.FLAG,
         dangerous_mode=DangerousModeStrategy.CLI_FLAG,
+        event_channel=EventChannel.STREAM_JSON,
         notes="Structured JSON output via --format json. --continue re-enters the prior session; "
         "--auto plus an explicit OPENCODE_PERMISSION policy pins tool permissions per spawn.",
     ),
