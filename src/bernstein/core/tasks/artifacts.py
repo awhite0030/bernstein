@@ -338,12 +338,12 @@ def _eval_criteria_match(kind: ArtifactKind, artifact: Any, expr_text: str) -> t
         # populated strictly on demand.
         results: dict[boolean.Symbol, boolean.Symbol] = {}
 
-        def _resolve_leaf(sym: boolean.Symbol) -> boolean.Symbol:
-            if sym in results:
-                return results[sym]
-            ok, reason = _eval_leaf_predicate(sym.obj, cur)
+        def _resolve_leaf(sym: boolean.Symbol, _cur=cur, _results=results) -> boolean.Symbol:
+            if sym in _results:
+                return _results[sym]
+            ok, _reason = _eval_leaf_predicate(sym.obj, _cur)
             resolved = algebra.TRUE if ok else algebra.FALSE
-            results[sym] = resolved
+            _results[sym] = resolved
             return resolved
 
         final = expr.subs(_resolve_leaf)
