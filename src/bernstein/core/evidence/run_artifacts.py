@@ -207,7 +207,7 @@ def _sha256_bytes(value: bytes) -> str:
     return f"sha256:{hashlib.sha256(value).hexdigest()}"
 
 
-def _canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
+def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -279,7 +279,7 @@ def _build_finding_content(
         "snippet_hash": _sha256_bytes(_canonical_text(snippet_text).encode("utf-8")),
     }
     address_preimage = {"identity": identity, "provenance": provenance}
-    address = _sha256_bytes(_canonical_json_bytes(address_preimage))
+    address = _sha256_bytes(canonical_json_bytes(address_preimage))
     return cast(
         FindingArtifactContent,
         {
@@ -439,7 +439,7 @@ class ArtifactPayload:
             invocation_argv_hash=invocation_argv_hash,
             target=target,
         )
-        finding_json = _canonical_json_bytes(content).decode("utf-8")
+        finding_json = canonical_json_bytes(content).decode("utf-8")
         return ArtifactPayload(artifact_type=ARTIFACT_TYPE_FINDING, finding_json=finding_json)
 
     def to_content_dict(self) -> ArtifactContent:

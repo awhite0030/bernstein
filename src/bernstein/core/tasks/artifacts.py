@@ -32,6 +32,14 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
+from bernstein.core.finding_canonicaliser import (
+    FindingValidationError,
+    build_finding_address_preimage,
+)
+from bernstein.core.finding_canonicaliser import (
+    canonical_json_bytes as _canonical_finding_json_bytes,
+)
+
 
 class ArtifactKind(StrEnum):
     """Closed set of artifact kinds a task can declare it produces."""
@@ -150,40 +158,42 @@ def _coerce_rows(raw: Any) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
+
 def _canonical_finding_bytes(raw: Any) -> bytes:
     """Canonicalise a SARIF 2.1.0 finding artifact for content-addressing.
-    Projects the finding down to stable identity fields, deliberately dropping
-    the raw line number so cosmetic shifts don't change the hash. Binds tool
-    context so the identity is anchored to the exact invocation.
+    Delegates to the stricter, unified implementation from the evidence boundary.
     """
     if not isinstance(raw, dict):
         raise CanonicalisationError(f"finding artifact must be a mapping, got {type(raw).__name__}")
 
-    # Extract SARIF result fields
-    rule_id = str(raw.get("ruleId", ""))
+    from typing import cast
 
-    # Normalise artifact location URI to forward slashes
-    artifact_location = raw.get("artifactLocation", {})
-    uri = str(artifact_location.get("uri", "")).replace("\\", "/")
+    raw_dict = cast(dict[str, Any], raw)
+    sarif_result = raw_dict.get("sarif_result", raw_dict)
+    provenance = raw_dict.get("provenance", raw_dict)
 
-    # Hash the snippet text instead of using the raw line number
-    region = raw.get("region", {})
-    snippet_text = str(region.get("snippet", {}).get("text", ""))
-    snippet_hash = "sha256:" + hashlib.sha256(snippet_text.encode("utf-8")).hexdigest()
+    if not isinstance(sarif_result, dict):
+        raise CanonicalisationError("finding payload is missing required field sarif_result or it is not a dict")
+    if not isinstance(provenance, dict):
+        raise CanonicalisationError("finding payload is missing required field provenance or it is not a dict")
 
-    # Bind context fields required by the issue
-    projected = {
-        "ruleId": rule_id,
-        "uri": uri,
-        "snippet_hash": snippet_hash,
-        "tool": str(raw.get("tool", "")),
-        "tool_version": str(raw.get("tool_version", "")),
-        "pinned_digest": str(raw.get("pinned_digest", "")),
-        "invocation_argv_hash": str(raw.get("invocation_argv_hash", "")),
-        "target": str(raw.get("target", "")),
-    }
+    # Type annotations for pyright
+    typed_sarif_result = cast(dict[str, Any], sarif_result)
+    typed_provenance = cast(dict[str, Any], provenance)
 
-    return _canonical_json_bytes(projected)
+    try:
+        content = build_finding_address_preimage(
+            typed_sarif_result,
+            tool=str(typed_provenance.get("tool", "")),
+            tool_version=str(typed_provenance.get("tool_version", "")),
+            pinned_ruleset_or_feed_digest=str(typed_provenance.get("pinned_ruleset_or_feed_digest", "")),
+            invocation_argv_hash=str(typed_provenance.get("invocation_argv_hash", "")),
+            target=str(typed_provenance.get("target", "")),
+        )
+    except FindingValidationError as exc:
+        raise CanonicalisationError(str(exc)) from exc
+
+    return _canonical_finding_json_bytes(content)  # type: ignore
 
 
 def canonicalise_artifact(kind: ArtifactKind | str, raw: Any) -> bytes:
