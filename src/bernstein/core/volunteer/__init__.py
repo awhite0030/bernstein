@@ -18,6 +18,7 @@ anyone's word for either.
 
 from __future__ import annotations
 
+from bernstein.core.volunteer.adapter_selection import select_volunteer_adapter
 from bernstein.core.volunteer.budget import (
     DEFAULT_BUDGET_CONFIG_PATH,
     DEFAULT_BUDGET_DIR,
@@ -306,6 +307,7 @@ __all__ = [
     "sanitize_issue_text",
     "save_budget_config",
     "save_ledger",
+    "select_volunteer_adapter",
     "should_skip",
     "strip_html_comments",
     "verify_clean_room_receipt",
