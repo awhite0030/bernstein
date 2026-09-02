@@ -9047,6 +9047,67 @@ def record_capability_authorization(
     )
 
 
+def get_unauthorized_widening_deltas(chain: AuditChainStore, run_id: str) -> frozenset[str]:
+    """Return the set of widening capability deltas that lack a valid authorization.
+
+    Scans the *chain* for ``EVENT_CAPABILITY_DELTA`` and
+    ``EVENT_CAPABILITY_AUTHORIZATION`` events matching *run_id*.
+    A widening delta is considered authorized only if the chain contains
+    an authorization event for the same ``delta_hash`` whose recorded
+    ``authorization_hash`` is self-authenticating (i.e. matches the
+    re-computed hash of the payload).
+
+    Args:
+        chain: The audit chain store to query.
+        run_id: The run identifier to filter events.
+
+    Returns:
+        A set of ``delta_hash`` strings for any widening capability delta
+        that does not have a corresponding valid authorization.
+    """
+    widening_deltas: set[str] = set()
+    authorized_deltas: set[str] = set()
+
+    # The gate depends on cryptographic integrity; only process verified events.
+    for entry in chain.scan_verified().events:
+        details = entry.details
+        if not isinstance(details, dict):
+            continue
+        if details.get("run_id") != run_id:
+            continue
+
+        if entry.event_type == EVENT_CAPABILITY_DELTA:
+            if details.get("is_widening") is True:
+                delta_hash = details.get("delta_hash")
+                if isinstance(delta_hash, str):
+                    widening_deltas.add(delta_hash)
+
+        elif entry.event_type == EVENT_CAPABILITY_AUTHORIZATION:
+            delta_hash = details.get("delta_hash")
+            if not isinstance(delta_hash, str):
+                continue
+
+            authorizer = details.get("authorizer")
+            authorized_at_ns = details.get("authorized_at_ns")
+            authorization_hash = details.get("authorization_hash")
+
+            if (
+                isinstance(authorizer, str)
+                and isinstance(authorized_at_ns, int)
+                and isinstance(authorization_hash, str)
+            ):
+                expected_hash = _compute_authorization_hash(
+                    run_id=run_id,
+                    delta_hash=delta_hash,
+                    authorizer=authorizer,
+                    authorized_at_ns=authorized_at_ns,
+                )
+                if authorization_hash == expected_hash:
+                    authorized_deltas.add(delta_hash)
+
+    return frozenset(widening_deltas - authorized_deltas)
+
+
 def record_tracker_pipeline_sweep(
     *,
     chain: AuditChainStore,
@@ -9260,6 +9321,7 @@ __all__ = [
     "SkillInstallReceiptDetails",
     "SkillVerificationRefusalDetails",
     "ThreadApprovalDetails",
+    "get_unauthorized_widening_deltas",
     "reconstruct_claim_holders",
     "reconstruct_mcp_call_order",
     "record_a2a_message_receipt",

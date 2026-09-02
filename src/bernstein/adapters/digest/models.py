@@ -48,8 +48,8 @@ class TraceRecord:
             ruleset_version=str(data["ruleset_version"]),
             raw_sha256=str(data["raw_sha256"]),
             digest_sha256=str(data["digest_sha256"]),
-            raw_bytes=int(data["raw_bytes"]),
-            digest_bytes=int(data["digest_bytes"]),
+            raw_bytes=int(data["raw_bytes"]),  # type: ignore[call-overload]
+            digest_bytes=int(data["digest_bytes"]),  # type: ignore[call-overload]
         )
 
     @property

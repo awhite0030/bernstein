@@ -34,6 +34,7 @@ from bernstein.core.lineage.entry import (
     ARTEFACT_KINDS,
     LINEAGE_ENTRY_VERSION,
     LineageEntry,
+    ModelRef,
     canonicalise,
     entry_hash,
 )
@@ -116,6 +117,7 @@ __all__ = [
     "LineageSpine",
     "LineageV2Store",
     "MergePolicy",
+    "ModelRef",
     "ParentRef",
     "SignedLineageLog",
     "SpineEntry",
