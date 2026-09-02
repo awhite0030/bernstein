@@ -348,6 +348,11 @@ jobs:
             fi
           fi
 
+          if [ -z "${{ secrets.BERNSTEIN_AUTOSYNC_TOKEN }}" ]; then
+            echo "::notice::BERNSTEIN_AUTOSYNC_TOKEN not set (e.g. in a fork). Skipping autosync."
+            skip=true
+          fi
+
           echo "skip=${skip}" >> "$GITHUB_OUTPUT"
 
       - name: Require named autosync token
