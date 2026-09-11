@@ -9,15 +9,17 @@ surface. Findings:
     ``"str"``). Network-controlled input → 500 / unhandled exception. Now
     returns ``False`` defensively (``isinstance(header, dict)`` guard).
 
-#2 (xfail - RFC 8785 §3.2.2.3 number divergence):
-    JCS-canonicalised numbers differ from the spec for integer-valued
-    floats (``10.0`` → ``"10.0"`` should be ``"10"``), small scientific
-    (``1e-7`` → ``"1e-07"`` should be ``"1e-7"``), and negative zero. Cards
-    today carry ``max_budget_usd``, ``created_at``, ``expires_at`` as
-    floats - a strictly RFC-8785-compliant verifier will compute different
-    bytes than the signer when those values are integer-valued.
-    Verified against the official RFC 8785 reference test vectors -
-    ``structures.json`` fails for exactly this reason (``56.0`` ≠ ``56``).
+#2 (FIXED - RFC 8785 §3.2.2.3 number serialisation):
+    JCS-canonicalised numbers used to differ from the spec for
+    integer-valued floats (``10.0`` → ``"10.0"``, should be ``"10"``), for
+    scientific notation on either side of the ES6 thresholds (``1e-7`` →
+    ``"1e-07"``, should be ``"1e-7"``), and for negative zero. Cards carry
+    ``max_budget_usd``, ``created_at`` and ``expires_at`` as floats, so a
+    strictly RFC-8785-compliant verifier computed different bytes than the
+    signer whenever one of those landed on an integer boundary.
+    ``canonicalize_jcs`` now implements the ECMAScript ``Number::toString``
+    rule the spec cites, and the official reference vector
+    ``structures.json`` passes (``56.0`` → ``56``).
 
 #3 (FIXED in #3105 - RFC 8785 §3.2.3 key-sort order):
     Object keys used to be sorted by Unicode code point (Python
@@ -39,33 +41,74 @@ surface. Findings:
     that signed will fail verification. Tracked in well_known.py docstring
     - persistence is deferred.
 
-#6 (operational, xfail - no JWKS rotation grace window):
-    The orchestrator publishes exactly one key today. A rotation event
-    therefore breaks every in-flight verifier holding the previous key
-    until they refetch JWKS. RFC 7517 expects rotation windows to publish
-    BOTH keys simultaneously so verifiers cached on the old kid keep
-    succeeding for the grace period. xfailed pending the persistence work.
+#6 (PARTIAL - JWKS rotation grace window publishes, but does not route):
+    The orchestrator used to publish exactly one key, so a rotation broke
+    every in-flight verifier holding the previous one. ``agent_json_keys``
+    now appends every archived public key still inside the keystore's
+    grace window (24h by default), so a verifier that tries every key in
+    the JWKS is rescued.
 
-#7 (operational, xfail - private signing key file mode not enforced):
-    Once persistence lands, the PEM dropped under
-    ``.sdd/security/keys/agent_signing/`` must be ``0600``. No code path
-    enforces this today. xfailed as a placeholder so when persistence
-    arrives the test starts failing and forces the chmod call.
+    A verifier that routes by ``kid`` is not, and ``well_known.py`` claims
+    it is. A card is signed under the *stable* kid
+    (``agent-bernstein-orchestrator``, ``_tenant_kid``) while an archived
+    key is published under a *timestamped* one
+    (``agent-bernstein-orchestrator-<stamp>``, ``ArchivedKey.kid``). After
+    a rotation the stable kid resolves to the **new** key, and the old key
+    sits under a kid no card ever referenced::
 
-#8 (xfail - RFC 8707 resource indicators not enforced):
-    ``auth_middleware`` does not consult the JWT ``resource``/``aud``
-    claim. A token minted for ``https://other.example`` is accepted by
-    Bernstein's task API as long as the signature verifies. RFC 8707
-    requires audience-binding so a stolen Bearer cannot be replayed at a
-    sibling resource server.
+        signing kid on a card : agent-bernstein-orchestrator
+        jwks kid=agent-bernstein-orchestrator            -> new key
+        jwks kid=agent-bernstein-orchestrator-2026...Z   -> retired key
+
+    ``identity/http_signing.py`` gets this right by keying archived JWKs on
+    the thumbprint the signature carries. Pinned as an xfail below.
+
+#7 (FIXED - private signing key file mode):
+    Persistence landed as :class:`AgentCardKeystore`, and it enforces
+    ``0600`` in three places: the private PEM is created with ``O_EXCL``
+    and mode ``0600``, chmodded again after write, and a key already on
+    disk with looser permissions is *refused* rather than loaded. The
+    placeholder here asserted a path the implementation never used
+    (``.sdd/security/keys/agent_signing/``, against a keystore rooted at
+    ``.bernstein/keys``), so it reported the control missing on a tree
+    that had it.
+
+#8 (PARTIAL - RFC 8707 resource indicators: implemented, opt-in, claim-conditional):
+    ``auth_middleware`` consults the JWT ``resource`` claim through
+    ``_resource_indicator_check`` and answers a mismatch with the RFC 6750
+    challenge ``Bearer error="invalid_token",
+    error_description="resource indicator mismatch"``. That machinery is
+    real and covered in
+    ``tests/unit/test_auth_middleware_resource_indicator.py``.
+
+    Two gaps keep the original finding open on a default install, and
+    neither is a bug in that machinery:
+
+    1. **Opt-in.** ``expected_resource`` defaults to ``""``
+       (``auth.py``), so with the environment variable unset the tuple is
+       empty, ``_resource_indicator_check`` returns early, and a token
+       minted for another resource server is accepted out of the box.
+    2. **Claim-conditional.** Even where enforcement *is* configured, a
+       token carrying no ``resource`` claim at all passes.
+
+    So a stolen Bearer can still be replayed at a sibling resource server
+    on a stock deployment. Closing that is a separate change with its own
+    risk (OIDC puts the client id in ``aud``, so treating ``aud`` as a
+    resource indicator would break ordinary setups); what is recorded here
+    is what shipped.
 
 #9 (FIXED - ``typ`` cross-context replay):
     Confirmed via :class:`TestTypReplayContext`. The verifier rejects any
     JWS whose protected header carries a different ``typ`` value, even if
     signed by the same Ed25519 key.
 
-#10 (operational - DOS / archive leak on rotation): no rotation today, so
-    no leak - guarded by xfail until rotation lands.
+#10 (operational, xfail - rotation archive is not bounded): rotation has
+    landed, and every rotation moves the previous keypair under
+    ``archive/<isoformat>/``. ``list_archived`` filters that directory by
+    the grace window when publishing the JWKS, but nothing removes an entry
+    once it falls outside: its docstring says old archives "may be GC'd by
+    the operator out-of-band". Repeated rotation therefore grows a
+    directory of retired *private* keys without bound.
 
 The ``typ: agent-card+jws`` cross-context replay invariant is verified
 positively in :class:`TestTypReplayContext`.
@@ -74,15 +117,27 @@ RFC 8785 reference vector status (cyberphone/json-canonicalization):
     arrays.json    PASS
     french.json    PASS
     values.json    PASS
-    structures.json FAIL (#2 - integer-valued float ``56.0`` ≠ ``56``)
-    weird.json     FAIL (U+007F escaping in a string value; its key order,
-                   the #3 surrogate-pair case, is correct since #3105)
+    structures.json PASS (since #2 was fixed)
+    weird.json     PASS
+
+``weird.json`` was recorded here as FAIL on U+007F escaping. It was not.
+Its literals had been transcribed by hand and lost three characters on the
+way, so the test drove a payload the vector does not contain against bytes
+no conformant implementation produces, and the xfail pinned that rather
+than a divergence. RFC 8785 section 3.2.2.2 defers string serialization to
+ECMAScript's ``JSON.stringify``, which escapes the quote, the backslash
+and U+0000 to U+001F and emits everything else as-is, U+007F included.
+All five published vectors were checked against
+``cyberphone/json-canonicalization/testdata/`` and ``canonicalize_jcs``
+reproduces each one byte for byte.
 """
 
 from __future__ import annotations
 
 import base64
+import sys
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -90,6 +145,10 @@ from cryptography.hazmat.primitives import serialization
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from bernstein.core.identity.agent_card import (
+    AgentIdentityCard,
+    issue_identity_card,
+)
 from bernstein.core.security.agent_card_signer import (
     AgentCardSignature,
     canonicalize_jcs,
@@ -97,14 +156,28 @@ from bernstein.core.security.agent_card_signer import (
     sign_agent_card,
     verify_agent_card,
 )
-from bernstein.core.security.agent_identity import (
-    AgentIdentityCard,
-    issue_identity_card,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _jwk_x(public_pem: bytes) -> str:
+    """Return the base64url ``x`` an Ed25519 public PEM produces in a JWK."""
+    raw = serialization.load_pem_public_key(public_pem).public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _jwks_request() -> Any:
+    """Return the minimal request object ``agent_json_keys`` reads a tenant from."""
+
+    class _Request:
+        headers: dict[str, str] = {}
+        query_params: dict[str, str] = {}
+
+    return _Request()
 
 
 def _stable_card(agent_id: str = "claude-test-id", *, max_budget: float = 5.0) -> AgentIdentityCard:
@@ -238,37 +311,27 @@ def test_jws_with_invalid_base64_header_returns_false() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "RFC 8785 §3.2.2.3: integer-valued floats serialise as '10', not '10.0'. "
-        "Python json.dumps emits '10.0'. Card body has float fields "
-        "(max_budget_usd, created_at, expires_at) so this affects every signed "
-        "card whenever those values land on integer boundaries. A strict RFC "
-        "8785 verifier (e.g. a Java JOSE library) would compute different bytes "
-        "than the signer. Tracked for canonicaliser overhaul; current surface "
-        "is interoperable as long as both sides use this same canonicaliser."
-    ),
-    strict=True,
-)
 def test_rfc_8785_integer_valued_floats_lose_decimal() -> None:
+    """An integer-valued float serialises as an integer (FIXED).
+
+    This was an ``xfail(strict=True)``: Python's ``repr`` keeps the
+    trailing ``.0`` that RFC 8785 §3.2.2.3 drops, so a strict verifier
+    (a Java JOSE library, say) computed different bytes than the signer
+    for any card whose ``max_budget_usd``, ``created_at`` or
+    ``expires_at`` landed on an integer boundary.
+    """
     assert canonicalize_jcs(10.0) == b"10"
     assert canonicalize_jcs(0.0) == b"0"
     assert canonicalize_jcs(1.0) == b"1"
 
 
-@pytest.mark.xfail(
-    reason=("RFC 8785 §3.2.2.3 small-scientific exponent has no leading zero - 1e-7, not 1e-07."),
-    strict=True,
-)
 def test_rfc_8785_small_scientific_exponent_format() -> None:
+    """The exponent carries no padding zero (FIXED): ``1e-7``, not ``1e-07``."""
     assert canonicalize_jcs(1e-7) == b"1e-7"
 
 
-@pytest.mark.xfail(
-    reason="RFC 8785 §3.2.2.3 normalises -0.0 to '0'; Python emits '-0.0'.",
-    strict=True,
-)
 def test_rfc_8785_negative_zero_normalised() -> None:
+    """Negative zero normalises to ``0`` (FIXED); Python's ``repr`` kept the sign."""
     assert canonicalize_jcs(-0.0) == b"0"
 
 
@@ -511,18 +574,13 @@ def test_rfc_8785_vector_values_numbers() -> None:
     assert canonicalize_jcs(1e-27) == b"1e-27"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "RFC 8785 reference vector ``structures.json`` uses ``56.0`` as an "
-        "integer-valued float and the canonical output is ``56``. Python "
-        "json.dumps emits ``56.0``. Same root cause as #2 - flagged "
-        "separately so the failure points at the reference vector, not "
-        "just an ad-hoc number we picked."
-    ),
-    strict=True,
-)
 def test_rfc_8785_vector_structures() -> None:
-    """RFC 8785 reference vector ``structures.json`` - fails on ``56.0``."""
+    """RFC 8785 reference vector ``structures.json`` (PASSES since #2).
+
+    The vector's ``56.0`` is the integer-valued-float case, so this is the
+    reference-vector form of the #2 assertion rather than a number we
+    picked ourselves.
+    """
     inp = {
         "1": {"f": {"f": "hi", "F": 5}, "\n": 56.0},
         "10": {},
@@ -535,34 +593,37 @@ def test_rfc_8785_vector_structures() -> None:
     assert canonicalize_jcs(inp) == expected
 
 
-@pytest.mark.xfail(
-    reason=(
-        "The key-sort half of this vector passes since #3105: 😂 (U+1F602, "
-        "UTF-16 high surrogate 0xD83D) now sorts before שּ (U+FB33), which is "
-        "the RFC 8785 §3.2.3 order. The remaining divergence is unrelated to "
-        "key order - it is the escaping of U+007F inside a string VALUE, "
-        "which belongs to §3.2.2.2 string serialization and is tracked "
-        "separately. Do not fold it into a key-ordering change: it moves "
-        "signed bytes for a different class of payload."
-    ),
-    strict=True,
-)
 def test_rfc_8785_vector_weird() -> None:
+    """RFC 8785 reference vector ``weird.json`` (PASSES; the xfail was wrong).
+
+    Two things this vector pins at once. Its key order is the #3
+    surrogate-pair case: U+1F602 starts with the UTF-16 high surrogate
+    0xD83D and sorts below U+FB33, which is the RFC 8785 section 3.2.3
+    order and has held since #3105.
+
+    Its value is the part that was recorded wrong. The expected bytes here
+    escaped U+007F; the published vector carries the raw 0x7f byte, and so
+    does this canonicaliser, because section 3.2.2.2 defers to ECMAScript's
+    ``JSON.stringify`` and that escapes only the quote, the backslash and
+    U+0000 to U+001F.
+    """
     inp = {
-        "€": "Euro Sign",
-        "\r": "Carriage Return",
-        "\n": "Newline",
+        "\u20ac": "Euro Sign",
+        "\u000d": "Carriage Return",
+        "\u000a": "Newline",
         "1": "One",
-        "": "Control",
-        "😂": "Smiley",
-        "ö": "Latin Small Letter O With Diaeresis",
-        "שּ": "Hebrew Letter Dalet With Dagesh",
+        "\u0080": "Control\u007f",
+        "\U0001f602": "Smiley",
+        "\u00f6": "Latin Small Letter O With Diaeresis",
+        "\ufb33": "Hebrew Letter Dalet With Dagesh",
         "</script>": "Browser Challenge",
     }
     expected = (
-        b'{"\\n":"Newline","\\r":"Carriage Return","1":"One",'
+        b'{"\\n":"Newline",'
+        b'"\\r":"Carriage Return",'
+        b'"1":"One",'
         b'"</script>":"Browser Challenge",'
-        b'"\xc2\x80":"Control\\u007f",'
+        b'"\xc2\x80":"Control\x7f",'
         b'"\xc3\xb6":"Latin Small Letter O With Diaeresis",'
         b'"\xe2\x82\xac":"Euro Sign",'
         b'"\xf0\x9f\x98\x82":"Smiley",'
@@ -585,15 +646,8 @@ def test_rfc_8785_vector_weird() -> None:
     "value",
     [1.0, 1e0, 100e-2, 100e-2],
 )
-@pytest.mark.xfail(
-    reason=(
-        "RFC 8785 §3.2.2.3 - these float literals must canonicalise to "
-        "``1``. Python json.dumps emits ``1.0``. Same root cause as #2; "
-        "flagged separately as the canonical-form gotcha."
-    ),
-    strict=True,
-)
 def test_rfc_8785_numeric_equivalence_floats_canonicalise_to_int(value: float) -> None:
+    """Every spelling of one canonicalises to ``1`` (FIXED)."""
     assert canonicalize_jcs(value) == b"1"
 
 
@@ -633,47 +687,113 @@ def test_jcs_emoji_emitted_as_utf8_4_byte_sequence() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Finding #6 - JWKS today publishes exactly one key. RFC 7517 "
-        "expects rotation windows to publish BOTH keys so cached verifiers "
-        "keep succeeding during the grace period. The orchestrator has no "
-        "rotation hook today; persistence work is tracked separately. "
-        "Test asserts the desired post-rotation invariant: a verifier "
-        "holding the previous public key still validates a card signed by "
-        "the previous private key inside the grace window."
-    ),
-    strict=True,
-)
-def test_jwks_rotation_grace_window_keeps_old_key_verifying() -> None:
-    """During rotation, a JWKS response should advertise both old and new
-    keys so in-flight verifiers cached on the old ``kid`` keep succeeding.
+def test_jwks_rotation_grace_window_publishes_the_retired_key(tmp_path: Path) -> None:
+    """A rotation keeps the retired key in the JWKS for the grace window.
+
+    This was an xfail claiming the orchestrator publishes exactly one key,
+    so a rotation 401s every in-flight verifier holding the previous one.
+    ``agent_json_keys`` now appends every archived key still inside the
+    keystore's grace window, so a verifier that tries every key is rescued.
+    A verifier that routes by ``kid`` is not: see the xfail below.
+
+    The old test simulated rotation by resetting the in-process cache
+    twice. That predates persistence: resetting the cache now reloads the
+    same key from disk, so it was asserting against a rotation that never
+    happened.
     """
     from bernstein.core.routes.well_known import (
+        _get_keystore,
         _get_signing_keypair,
         _reset_signing_keypair_for_tests,
         agent_json_keys,
     )
 
-    _reset_signing_keypair_for_tests()
-    _old_priv, old_pub = _get_signing_keypair()
-    # Simulate rotation by resetting and re-asking for a fresh keypair.
-    _reset_signing_keypair_for_tests()
-    _new_priv, new_pub = _get_signing_keypair()
-    assert new_pub != old_pub  # rotation actually rotated
-    jwks = agent_json_keys()
-    advertised = {jwk["x"] for jwk in jwks["keys"]}
-    # Today only the new key is advertised - this is the bug.
-    expected_old_x = (
-        base64.urlsafe_b64encode(
-            serialization.load_pem_public_key(old_pub).public_bytes(
-                serialization.Encoding.Raw, serialization.PublicFormat.Raw
-            )
+    _reset_signing_keypair_for_tests(tmp_path / "keys")
+    try:
+        _old_priv, old_pub = _get_signing_keypair()
+        _get_keystore().rotate()
+        _reset_signing_keypair_for_tests(tmp_path / "keys")
+        _new_priv, new_pub = _get_signing_keypair()
+        assert new_pub != old_pub, "rotate() did not actually rotate"
+
+        advertised = {jwk["x"] for jwk in agent_json_keys(_jwks_request())["keys"]}
+        assert _jwk_x(new_pub) in advertised, "the current key is not advertised"
+        assert _jwk_x(old_pub) in advertised, (
+            "retired key dropped from JWKS at rotation - a verifier that tries every key 401s"
         )
-        .rstrip(b"=")
-        .decode("ascii")
+    finally:
+        _reset_signing_keypair_for_tests()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Finding #6, remaining half. A card is signed under the stable kid "
+        "(_tenant_kid -> 'agent-bernstein-orchestrator') while an archived key "
+        "is published under a timestamped one (ArchivedKey.kid). After a "
+        "rotation the stable kid resolves to the NEW key, so a verifier that "
+        "routes by kid - which well_known.agent_json_keys' docstring says is "
+        "supported - fetches the wrong key and still fails. Only a verifier "
+        "that tries every key is rescued by the grace window. "
+        "identity/http_signing.py keys archived JWKs on the thumbprint the "
+        "signature carries, which is the shape that works."
+    ),
+)
+def test_jwks_routes_the_signing_kid_to_the_retired_key(tmp_path: Path) -> None:
+    """The kid on an in-flight card must resolve to the key that signed it."""
+    from bernstein.core.routes.well_known import (
+        _get_keystore,
+        _get_signing_keypair,
+        _reset_signing_keypair_for_tests,
+        _tenant_kid,
+        agent_json_keys,
     )
-    assert expected_old_x in advertised, "Old key dropped from JWKS at rotation - verifiers cached on it 401."
+
+    _reset_signing_keypair_for_tests(tmp_path / "keys")
+    try:
+        _old_priv, old_pub = _get_signing_keypair()
+        signing_kid = _tenant_kid("default")
+        _get_keystore().rotate()
+        _reset_signing_keypair_for_tests(tmp_path / "keys")
+        _get_signing_keypair()
+
+        by_kid = {jwk["kid"]: jwk["x"] for jwk in agent_json_keys(_jwks_request())["keys"]}
+        assert by_kid[signing_kid] == _jwk_x(old_pub)
+    finally:
+        _reset_signing_keypair_for_tests()
+
+
+def test_jwks_drops_a_key_once_the_grace_window_closes(tmp_path: Path) -> None:
+    """The window is a window: a key past it stops being advertised.
+
+    Asserted against ``agent_json_keys`` rather than ``list_archived``. The
+    JWKS is what a verifier fetches, and a test that only checks the
+    keystore would still pass if the builder stopped consulting it.
+    """
+    from bernstein.core.routes.well_known import (
+        _KEYSTORES,
+        _get_keystore,
+        _get_signing_keypair,
+        _reset_signing_keypair_for_tests,
+        agent_json_keys,
+    )
+    from bernstein.core.security.agent_card_keystore import AgentCardKeystore
+    from bernstein.core.security.tenanting import DEFAULT_TENANT_ID
+
+    _reset_signing_keypair_for_tests(tmp_path / "keys")
+    try:
+        _priv, old_pub = _get_signing_keypair()
+        _get_keystore().rotate()
+        # Re-bind the tenant to a keystore whose window has already closed.
+        _KEYSTORES[DEFAULT_TENANT_ID] = AgentCardKeystore(tmp_path / "keys", grace_seconds=0)
+        _reset_signing_keypair_for_tests(tmp_path / "keys")
+        _get_signing_keypair()
+        _KEYSTORES[DEFAULT_TENANT_ID] = AgentCardKeystore(tmp_path / "keys", grace_seconds=0)
+
+        advertised = {jwk["x"] for jwk in agent_json_keys(_jwks_request())["keys"]}
+        assert _jwk_x(old_pub) not in advertised
+    finally:
+        _reset_signing_keypair_for_tests()
 
 
 def test_jwks_cold_start_under_concurrent_load_does_not_500() -> None:
@@ -705,23 +825,37 @@ def test_jwks_cold_start_under_concurrent_load_does_not_500() -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Finding #7 - once persistence lands, the PEM under "
-        "``.sdd/security/keys/agent_signing/`` MUST be ``0600``. No "
-        "persistence today, so no permissions to check. Test xfailed as a "
-        "placeholder so the day persistence lands without the chmod, this "
-        "test starts failing and forces the fix."
-    ),
-    strict=True,
-)
-def test_persisted_signing_key_file_mode_is_0600() -> None:
-    """Once the orchestrator persists its signing key, the PEM must be 0600."""
-    from pathlib import Path
+def test_persisted_signing_key_file_mode_is_0600(tmp_path: Path) -> None:
+    """The persisted private PEM is owner-only (FIXED).
 
-    expected = Path(".sdd/security/keys/agent_signing/private.pem")
-    assert expected.exists(), "no persisted key file - persistence not landed yet"
-    assert (expected.stat().st_mode & 0o777) == 0o600
+    This was an xfail asserting ``.sdd/security/keys/agent_signing/private.pem``
+    exists. Persistence landed as :class:`AgentCardKeystore`, rooted at
+    ``.bernstein/keys`` (or ``BERNSTEIN_AGENT_CARD_KEY_DIR``), so the old
+    assertion failed on "no persisted key file" and reported the control
+    missing on a tree that had it.
+    """
+    from bernstein.core.security.agent_card_keystore import AgentCardKeystore
+
+    keystore = AgentCardKeystore(tmp_path / "keys")
+    keystore.load_or_generate()
+    private_pem = tmp_path / "keys" / "agent-card.ed25519"
+    assert private_pem.is_file()
+    if sys.platform == "win32":
+        pytest.skip("POSIX file modes are not meaningful on Windows")
+    assert (private_pem.stat().st_mode & 0o777) == 0o600
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes only")
+def test_a_loosened_signing_key_is_refused_rather_than_loaded(tmp_path: Path) -> None:
+    """Enforcing the mode at write is not enough if a later chmod is honoured."""
+    from bernstein.core.security.agent_card_keystore import AgentCardKeystore
+
+    keystore = AgentCardKeystore(tmp_path / "keys")
+    keystore.load_or_generate()
+    (tmp_path / "keys" / "agent-card.ed25519").chmod(0o644)
+
+    with pytest.raises(PermissionError, match="refusing to load"):
+        AgentCardKeystore(tmp_path / "keys").load_or_generate()
 
 
 # ---------------------------------------------------------------------------
@@ -729,25 +863,51 @@ def test_persisted_signing_key_file_mode_is_0600() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Finding #8 - auth_middleware does not consult the JWT "
-        "``resource``/``aud`` claim. A token minted for ``other.example`` "
-        "verifies fine on Bernstein's API today. RFC 8707 mandates "
-        "audience-binding so a stolen Bearer cannot be replayed at a "
-        "sibling resource server. Tracked as deferred in agent_card_signer "
-        "module docstring."
-    ),
-    strict=True,
-)
 def test_rfc_8707_resource_indicator_mismatch_rejected() -> None:
-    """A JWT whose ``resource`` claim points elsewhere must be rejected."""
-    from bernstein.core.security import auth_middleware  # noqa: F401
+    """A JWT whose ``resource`` claim points elsewhere is rejected (FIXED).
 
-    # Concrete assertion is parked behind the xfail; once the resource
-    # check lands in auth_middleware, replace with a real call that mints
-    # an off-resource token and asserts a 401.
-    raise AssertionError("RFC 8707 resource indicator enforcement not implemented")
+    This was an xfail whose body raised unconditionally, saying
+    ``auth_middleware`` does not consult the claim. It does:
+    ``_resource_indicator_check`` answers a mismatch with the RFC 6750
+    challenge, and the middleware calls it before the request reaches its
+    handler. End-to-end coverage lives in
+    ``tests/unit/test_auth_middleware_resource_indicator.py``; this pins the
+    predicate the finding was about.
+    """
+    from bernstein.core.security.auth_middleware import _resource_indicator_check
+
+    expected = ("https://bernstein.example",)
+    assert _resource_indicator_check({"resource": "https://bernstein.example"}, expected) is None
+    assert _resource_indicator_check({"resource": ["https://bernstein.example"]}, expected) is None
+
+    mismatch = _resource_indicator_check({"resource": "https://other.example"}, expected)
+    assert mismatch is not None, "a token minted for another resource server was accepted"
+
+    malformed = _resource_indicator_check({"resource": [1, 2]}, expected)
+    assert malformed is not None, "a non-string resource indicator was accepted"
+
+
+def test_rfc_8707_enforcement_is_skipped_when_unconfigured_or_unclaimed() -> None:
+    """Both skips are gaps in finding #8, not properties worth having.
+
+    This test exists to pin them as *known*, because a finding recorded as
+    closed is a finding nobody looks at again:
+
+    1. ``expected_resource`` defaults to ``""``, so on a stock install the
+       tuple is empty and a token minted for another resource server is
+       accepted.
+    2. Where enforcement is configured, a token carrying no ``resource``
+       claim passes anyway.
+
+    Changing either is a separate change with its own risk - OIDC puts the
+    client id in ``aud``, so treating ``aud`` as a resource indicator would
+    break ordinary deployments. What is asserted here is today's behaviour,
+    named as the gap it is.
+    """
+    from bernstein.core.security.auth_middleware import _resource_indicator_check
+
+    assert _resource_indicator_check({"resource": "https://other.example"}, ()) is None
+    assert _resource_indicator_check({}, ("https://bernstein.example",)) is None
 
 
 # ---------------------------------------------------------------------------

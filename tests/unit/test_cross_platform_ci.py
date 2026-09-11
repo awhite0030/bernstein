@@ -101,6 +101,18 @@ class TestCIWorkflowExists:
         assert "name" in data
         assert "jobs" in data
 
+    def test_main_and_macos_test_jobs_share_per_file_timeout(self) -> None:
+        data = _load_ci_workflow()
+        jobs = cast("dict[str, Any]", data["jobs"])
+        test_job = cast("dict[str, Any]", jobs["test"])
+        macos_job = cast("dict[str, Any]", jobs["test-macos"])
+        test_env = cast("dict[str, Any]", test_job.get("env", {}))
+        macos_env = cast("dict[str, Any]", macos_job.get("env", {}))
+
+        timeout_key = "BERNSTEIN_TEST_FILE_TIMEOUT_SECONDS"
+        assert test_env.get(timeout_key) == "600"
+        assert macos_env.get(timeout_key) == test_env[timeout_key]
+
     def test_ci_runs_on_ubuntu(self) -> None:
         data = _load_ci_workflow()
         # At least one job should run on ubuntu
@@ -138,20 +150,59 @@ class TestCIWorkflowExists:
                 f"docs_pattern={docs_pattern}, observability_pattern={observability_pattern}"
             )
 
-    def test_pull_request_test_job_fetches_base_ref_for_impacted_tests(self) -> None:
+    def test_pull_request_test_job_fetches_base_commit_for_impacted_tests(self) -> None:
+        """The base is fetched by sha, so shards that start apart still agree.
+
+        The shards of one run are not scheduled together - slot contention has
+        staggered them by hours - and each one resolves this base and re-runs
+        the selector itself. A base branch *name* therefore resolves to
+        different commits in different shards, which makes each shard partition
+        a different affected set; see
+        ``tests/unit/scripts/test_run_tests_affected_base_pinned.py``.
+        """
         data = _load_ci_workflow()
         steps = _ci_test_steps(data)
-        fetch_steps = [step for step in steps if step.get("name") == "Fetch base ref for impacted-test selection"]
+        fetch_steps = [step for step in steps if step.get("name") == "Fetch base commit for impacted-test selection"]
         assert len(fetch_steps) == 1
         fetch_step = fetch_steps[0]
         assert fetch_step.get("if") == "github.event_name == 'pull_request' && runner.os != 'Windows'"
         env = fetch_step.get("env") or {}
-        assert env.get("BASE_REF") == "${{ github.base_ref }}", (
-            "BASE_REF must be bound via env: to avoid template injection (zizmor)"
+        assert env.get("BASE_SHA") == "${{ github.event.pull_request.base.sha }}", (
+            "BASE_SHA must be bound via env: to avoid template injection (zizmor)"
         )
         run_script = fetch_step.get("run", "")
-        assert "refs/heads/${BASE_REF}" in run_script
-        assert "refs/remotes/origin/${BASE_REF}" in run_script
+        assert "${BASE_SHA}:refs/remotes/origin/pr-base" in run_script
+        assert "refs/heads/" not in run_script
+
+    def test_pull_request_test_job_fetches_head_commit_for_orphan_ratchet_inspection(self) -> None:
+        """The PR head commit is fetched by sha, so orphan-ratchet inspection can see it.
+
+        ``actions/checkout``'s default ``pull_request`` checkout resolves the
+        synthetic merge commit, not the head commit that produced it.
+        ``tests/unit/_orphan_scan.py::pull_request_head_sha`` needs that exact
+        commit object resolvable locally (``git cat-file -e <sha>^{commit}``)
+        to inspect the real PR branch instead of the merge artifact, and
+        raises rather than silently skipping when it is not there (#5565).
+        """
+        data = _load_ci_workflow()
+        steps = _ci_test_steps(data)
+        fetch_steps = [
+            step for step in steps if step.get("name") == "Fetch PR head commit for orphan-ratchet inspection"
+        ]
+        assert len(fetch_steps) == 1
+        fetch_step = fetch_steps[0]
+        assert fetch_step.get("if") == "github.event_name == 'pull_request' && runner.os != 'Windows'"
+        env = fetch_step.get("env") or {}
+        assert env.get("HEAD_SHA") == "${{ github.event.pull_request.head.sha }}", (
+            "HEAD_SHA must be bound via env: to avoid template injection (zizmor)"
+        )
+        run_script = fetch_step.get("run", "")
+        assert "${HEAD_SHA}:refs/remotes/origin/pr-head" in run_script
+        # A step of its own, not folded into the base-commit fetch above:
+        # test_run_tests_affected_base_pinned.py pins that step to writing
+        # exactly one ref for --affected to read.
+        base_fetch = next(step for step in steps if step.get("name") == "Fetch base commit for impacted-test selection")
+        assert "HEAD_SHA" not in (base_fetch.get("env") or {})
 
     def test_pull_request_test_job_uses_affected_runner_with_fallback(self) -> None:
         data = _load_ci_workflow()
@@ -162,14 +213,14 @@ class TestCIWorkflowExists:
         unix_steps = [step for step in run_steps if "Linux/macOS" in (step.get("name") or "")]
         assert len(unix_steps) == 1
         env = unix_steps[0].get("env") or {}
-        assert env.get("BASE_REF") == "${{ github.base_ref }}", (
-            "BASE_REF must be bound via env: to avoid template injection (zizmor)"
+        assert env.get("EVENT_NAME") == "${{ github.event_name }}", (
+            "EVENT_NAME must be bound via env: to avoid template injection (zizmor)"
         )
+        assert "BASE_REF" not in env, "the affected base must come from the run-pinned base sha, not a branch name"
         run_script = unix_steps[0].get("run", "")
-        assert "--affected" in run_script
-        assert "refs/remotes/origin/${BASE_REF}" in run_script
+        assert "--affected refs/remotes/origin/pr-base" in run_script
         assert "uv run python scripts/run_tests.py" in run_script
-        assert "--parallel 4" in run_script
+        assert "--parallel 6" in run_script
 
     def test_coverage_reporting_only_runs_on_push(self) -> None:
         data = _load_ci_workflow()

@@ -34,7 +34,7 @@ from bernstein.core.volunteer.manifest import VolunteerManifest, load_manifest_f
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from bernstein.core.github_app.check_runs import CheckRunClient
+    from bernstein.github_app.check_runs import CheckRunClient
 
 # Pattern to extract bundle JSON from PR body or comments
 _BUNDLE_JSON_PATTERN = re.compile(
@@ -420,8 +420,8 @@ def _compare_gate_results(
             comparisons.append(
                 GateComparison(
                     command=command,
-                    attested_exit_code=None,
-                    attested_log_sha256=None,
+                    attested_exit_code=None,  # type: ignore[arg-type]  # optional fields
+                    attested_log_sha256=None,  # type: ignore[arg-type]  # optional fields
                     ci_exit_code=ci_exit_code,
                     ci_log_sha256=ci_log_sha256,
                     passed=False,
