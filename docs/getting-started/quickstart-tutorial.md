@@ -5,16 +5,16 @@ search:
 
 # Interactive Quickstart Tutorial
 
-Get Bernstein running and orchestrating agents in under 10 minutes.
+Get Bernstein running and orchestrating adapters in under 10 minutes.
 
-**What you'll build**: A working multi-agent setup that reads a goal, spawns agents in
+**What you'll build**: A working multi-adapter setup that reads a goal, spawns adapters in
 isolated git worktrees, and merges verified results back to your branch automatically.
 
 **What you'll need**:
 - [ ] Python 3.12 or later
 - [ ] Git (any recent version)
-- [ ] At least one CLI coding agent (Claude Code, Codex, or Gemini - see Step 2)
-- [ ] An API key for your chosen agent
+- [ ] At least one CLI coding adapter (Claude Code, Codex, or Gemini - see Step 2)
+- [ ] An API key for your chosen adapter
 
 ---
 
@@ -46,9 +46,9 @@ bernstein 3.5.0
 
 ---
 
-## Step 2: Check for CLI agents
+## Step 2: Check for CLI adapters
 
-Bernstein does not run models directly - it orchestrates CLI coding agents that you install
+Bernstein does not run models directly - it orchestrates CLI coding adapters that you install
 separately. Check which ones are available on your system:
 
 ```bash
@@ -83,8 +83,8 @@ npm install -g @google/gemini-cli
 
 ## Step 3: Set your API key
 
-Each CLI agent authenticates with its own provider. Bernstein passes the environment
-through to the agents - set the key for whichever agent you installed:
+Each CLI adapter authenticates with its own provider. Bernstein passes the environment
+through to the adapters - set the key for whichever adapter you installed:
 
 ```bash
 # Claude Code
@@ -114,7 +114,7 @@ Expected output:
 
 ```
 ✓ Initialized .sdd/ state directory
-✓ Created bernstein.yaml (edit to configure agents and budget)
+✓ Created bernstein.yaml (edit to configure adapters and budget)
 ✓ Ready - run `bernstein -g "your goal"` to start
 ```
 
@@ -138,8 +138,8 @@ bernstein -g "Add a hello() function to src/utils.py that returns 'Hello, world!
 Bernstein will:
 1. Start the task server on port 8052
 2. Break the goal into tasks
-3. Spawn agents in isolated git worktrees
-4. Monitor agent progress via heartbeats
+3. Spawn adapters in isolated git worktrees
+4. Monitor adapter progress via heartbeats
 5. Run quality gates (lint, type-check, tests) on the output
 6. Merge verified results back to your branch
 
@@ -157,7 +157,7 @@ Example `bernstein status` output:
 
 ```
 Tasks: 3 open · 1 in-progress · 0 done · 0 failed
-Agents: 1 running (agent/abc12345 - backend)
+Adapters: 1 running (adapter/abc12345 - backend)
 Spend:  $0.04 so far
 ```
 
@@ -186,9 +186,9 @@ Total: $0.04 · 2 merged · 1 retrying
 Inspect a specific task's changes:
 
 ```bash
-bernstein diff <task-id>     # Git diff produced by the agent
+bernstein diff <task-id>     # Git diff produced by the adapter
 bernstein trace <task-id>    # Decision trace (which rules fired, what was approved)
-bernstein logs tail -a <task-id>  # Full agent output
+bernstein logs tail -a <task-id>  # Full adapter output
 ```
 
 ---
@@ -257,7 +257,7 @@ Set a per-run budget limit in `bernstein.yaml`:
 budget: "$5"
 ```
 
-For a hard stop that refuses further agent spawns past the cap, configure a
+For a hard stop that refuses further adapter spawns past the cap, configure a
 cost envelope with `hard_budget_usd` (see
 [CONFIG.md](../operations/CONFIG.md)).
 
@@ -272,11 +272,11 @@ http://127.0.0.1:8052/dashboard
 ```
 
 The dashboard shows:
-- Active agents and their current tasks
+- Active adapters and their current tasks
 - Task queue (open, in progress, completed, failed)
 - Token usage and cost estimate
 - Recent activity timeline
-- Agent logs (live streaming)
+- Adapter logs (live streaming)
 
 ---
 
@@ -287,7 +287,7 @@ bernstein stop
 ```
 
 This gracefully drains in-progress tasks (30-second timeout by default), then shuts down
-the task server and all agents.
+the task server and all adapters.
 
 ```bash
 bernstein stop --force   # Hard kill without draining
@@ -302,7 +302,7 @@ You have a working Bernstein setup. Here are common next steps:
 - **Add more adapters**: Run `bernstein integrations list` to see what else is installable
 - **Configure model routing**: Set `model_policy` in `bernstein.yaml` to use cheaper models for simple tasks
 - **Write a plan file**: For real project work, a plan file gives you more control than an inline goal
-- **Set up guardrails**: Add `.bernstein/rules.yaml` to control what agents are allowed to do
+- **Set up guardrails**: Add `.bernstein/rules.yaml` to control what adapters are allowed to do
 
 Useful references:
 
@@ -316,10 +316,10 @@ Useful references:
 
 ## Troubleshooting
 
-### "No agents available"
+### "No adapters available"
 
 ```bash
-bernstein doctor    # See which agent CLIs are installed and authenticated
+bernstein doctor    # See which adapter CLIs are installed and authenticated
 ```
 
 Install at least one:
@@ -340,7 +340,7 @@ BERNSTEIN_PORT=8053 bernstein run # Use a different port
 
 ### "Task failed: permission denied"
 
-The agent tried to modify a file outside its role's allowed paths. Check which file caused the violation:
+The adapter tried to modify a file outside its role's allowed paths. Check which file caused the violation:
 
 ```bash
 bernstein trace <task-id>   # Shows which permission rule fired
@@ -356,13 +356,13 @@ roles:
       - "config/**"   # Add this
 ```
 
-### "Agent stalled / no heartbeat"
+### "Adapter stalled / no heartbeat"
 
-Bernstein detects stalled agents automatically and retries the task. To check status manually:
+Bernstein detects stalled adapters automatically and retries the task. To check status manually:
 
 ```bash
-bernstein status --mode expert   # Show agent detail, including heartbeats
-bernstein agents showcase        # List available agents grouped by role
+bernstein status --mode expert   # Show adapter detail, including heartbeats
+bernstein adapters list-status        # List available adapters and their status
 ```
 
 ### "bernstein init fails - not a git repository"
@@ -373,9 +373,9 @@ git commit --allow-empty -m "init"
 bernstein init
 ```
 
-### API key errors from the agent
+### API key errors from the adapter
 
-Bernstein passes your shell environment to agents unchanged. Verify the key is set:
+Bernstein passes your shell environment to adapters unchanged. Verify the key is set:
 
 ```bash
 echo $ANTHROPIC_API_KEY    # Should show your key (not empty)
