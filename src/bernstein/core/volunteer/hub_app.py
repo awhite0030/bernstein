@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -190,7 +191,7 @@ def _refusal_to_http(refusal: LeaseRefusal) -> None:
 
 def build_hub_app(
     lease_store: LeaseStore,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     authenticator: VolunteerAuthenticator | None = None,
     task_board: TaskBoard | None = None,
 ) -> FastAPI:

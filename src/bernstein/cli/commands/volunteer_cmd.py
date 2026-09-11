@@ -435,8 +435,13 @@ def verify_bundle_cmd(bundle_path: Path, repo_root: Path, receipt_out: Path | No
     # who rewrites this field also has to forge the signature over it, and
     # `verify_in_clean_room`'s first step (verify_result_bundle) is exactly
     # what catches that.
-    claimed_worker = envelope.statement.get("predicate", {}).get("bundle", {}).get("worker", {})
-    claimed_pem = claimed_worker.get("public_key_pem", "") if isinstance(claimed_worker, dict) else ""
+    statement: dict[str, Any] = envelope.statement
+    predicate = statement.get("predicate", {})
+    bundle = predicate.get("bundle", {}) if isinstance(predicate, dict) else {}  # type: ignore
+    claimed_worker = bundle.get("worker", {}) if isinstance(bundle, dict) else {}  # type: ignore
+    claimed_pem = claimed_worker.get("public_key_pem", "") if isinstance(claimed_worker, dict) else ""  # type: ignore
+    if not isinstance(claimed_pem, str):
+        claimed_pem = ""
     try:
         bundle_public_key = load_pem_public_key(claimed_pem.encode("ascii"))
     except (ValueError, TypeError, InvalidKey) as exc:
