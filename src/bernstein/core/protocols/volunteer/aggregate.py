@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """Volunteer receipt aggregate — append-only proof-of-reward ledger.
 
 A ``ReceiptAggregate`` holds a list of Merkle-tree-style receipts

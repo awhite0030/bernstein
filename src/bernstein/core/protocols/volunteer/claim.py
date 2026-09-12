@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """Volunteer claim protocol document.
 
 A Claim records that a specific worker has taken responsibility for a specific

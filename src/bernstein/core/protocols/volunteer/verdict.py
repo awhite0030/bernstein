@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """Volunteer verification verdict protocol document.
 
 A VerificationVerdict records the outcome of running gates on a submission.

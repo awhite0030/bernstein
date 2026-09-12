@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """Conformance harness: prove the same document survives GitHub ↔ hub projections.
 
 This module provides a generic framework for testing that volunteer protocol

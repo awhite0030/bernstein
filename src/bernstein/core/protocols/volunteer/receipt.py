@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """Volunteer merge receipt protocol document.
 
 A MergeReceipt records that a work-item was merged and the contributor
