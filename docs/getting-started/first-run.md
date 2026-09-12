@@ -9,16 +9,16 @@ search:
 my first orchestrated task complete." About 5 minutes.
 
 **You'll end up with**: A `.sdd/` workspace, a one-line goal that ran, and a clear
-`bernstein recap` summary of what the agents did.
+`bernstein recap` summary of what the adapters did.
 
 If `bernstein --version` doesn't work yet, finish the [install page](install.md) first.
 
 ---
 
-## Step 1: Pick (and authenticate) one CLI agent
+## Step 1: Pick (and authenticate) one CLI adapter
 
-Bernstein orchestrates **other** CLI coding agents - it doesn't talk to LLM APIs directly.
-You need at least one agent installed and logged in. Most people start with Claude Code:
+Bernstein orchestrates **other** CLI coding adapters - it doesn't talk to LLM APIs directly.
+You need at least one adapter installed and logged in. Most people start with Claude Code:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
@@ -48,7 +48,7 @@ git init
 git commit --allow-empty -m "init"
 ```
 
-Bernstein needs a git repo because each coding agent works in its own git worktree.
+Bernstein needs a git repo because each coding adapter works in its own git worktree.
 
 ---
 
@@ -99,8 +99,8 @@ What happens:
 
 1. Bernstein starts the task server on port 8052.
 2. The manager breaks the goal into one or more tasks.
-3. An agent spawns in an isolated git worktree.
-4. The janitor runs quality gates (lint, type-check, tests) on the agent's output.
+3. An adapter spawns in an isolated git worktree.
+4. The janitor runs quality gates (lint, type-check, tests) on the adapter's output.
 5. Verified work merges back to your branch.
 
 You'll see a live TUI in your terminal. Wait for it to finish - usually under 3 minutes
@@ -120,7 +120,7 @@ bernstein gui serve  # opens http://127.0.0.1:8052/ui/ in your browser
 
 ```
 Tasks: 0 open · 1 in-progress · 0 done · 0 failed
-Agents: 1 running (agent/abc12345 - backend)
+Adapters: 1 running (adapter/abc12345 - backend)
 Spend:  $0.04 so far
 ```
 
@@ -150,9 +150,9 @@ for how it is computed and what the caveats are.
 Inspect a specific task:
 
 ```bash
-bernstein diff <task-id>     # the git diff the agent produced
+bernstein diff <task-id>     # the git diff the adapter produced
 bernstein trace <task-id>    # which decisions fired and why
-bernstein logs tail -a <task-id>  # full agent stdout
+bernstein logs tail -a <task-id>  # full adapter stdout
 ```
 
 ---
@@ -160,13 +160,13 @@ bernstein logs tail -a <task-id>  # full agent stdout
 ## Try the demo first (no API key needed)
 
 If you don't have an API key set up, run the zero-config demo instead. It creates a temp
-Flask app with 4 intentional bugs and runs **mock** agents to fix them - no provider calls,
+Flask app with 4 intentional bugs and runs **mock** adapters to fix them - no provider calls,
 no spend.
 
 ```bash
-bernstein demo            # mock agents (~30 seconds)
+bernstein demo            # mock adapters (~30 seconds)
 bernstein demo --dry-run  # preview the plan without spawning
-bernstein demo --real     # use real agents (requires API key, ~$0.15)
+bernstein demo --real     # use real adapters (requires API key, ~$0.15)
 ```
 
 This is the fastest way to see the orchestrator move tasks through the lifecycle without
@@ -184,13 +184,13 @@ configuring anything.
 
 ## Common first-run errors
 
-### `No agents available`
+### `No adapters available`
 
-`bernstein doctor` shows every `Adapter:` row red. Install at least one CLI agent
+`bernstein doctor` shows every `Adapter:` row red. Install at least one CLI adapter
 (Step 1) and run its login flow. Then:
 
 ```bash
-bernstein agents discover    # rescan agent-role catalogs
+bernstein agents discover    # rescan adapter-role catalogs
 bernstein doctor             # confirm adapters + auth are green
 ```
 
@@ -210,7 +210,7 @@ git init && git commit --allow-empty -m "init"
 bernstein init
 ```
 
-### Agent stalls or no output
+### Adapter stalls or no output
 
 ```bash
 bernstein logs tail -f                   # follow live output
@@ -219,7 +219,7 @@ bernstein doctor --fix                   # clear stale locks
 ```
 
 Most stalls trace back to a missing API key or an expired auth token. `bernstein doctor`
-will name the agent that's failing.
+will name the adapter that's failing.
 
 ---
 
@@ -230,7 +230,7 @@ bernstein stop          # graceful drain, default 30s
 bernstein stop --force  # hard kill, no drain
 ```
 
-`stop` writes a SHUTDOWN signal under `.sdd/runtime/signals/` so agents finish their
+`stop` writes a SHUTDOWN signal under `.sdd/runtime/signals/` so adapters finish their
 current subtask and persist state before exiting.
 
 ---

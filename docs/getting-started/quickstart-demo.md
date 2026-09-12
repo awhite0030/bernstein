@@ -17,9 +17,9 @@
 
 `bernstein demo --flask-todo` runs a self-contained demo: it creates a temporary
 Flask TODO API project with intentional gaps, seeds three tasks against it,
-runs agents to complete them, and prints a summary — with no `bernstein.yaml`
+runs adapters to complete them, and prints a summary — with no `bernstein.yaml`
 and no prior project setup required. It exists to let a new user see
-multi-agent orchestration work end to end before committing to a real
+multi-adapter orchestration work end to end before committing to a real
 project.
 
 For a guided walkthrough that sets up your own project instead of a
@@ -38,7 +38,7 @@ bernstein demo --flask-todo --real --adapter codex
 |---|---|---|
 | `--keep` | off | Preserve the temp project directory after completion instead of deleting it. |
 | `--timeout SECONDS` | 300 | Maximum seconds to wait for all seeded tasks to finish. |
-| `--adapter NAME` | `mock` | CLI adapter to drive the agents. Like the rest of `bernstein demo`, real agents run only behind `--real`; without it the scenario runs on mock agents and costs nothing. |
+| `--adapter NAME` | `mock` | CLI adapter to drive the adapters. Like the rest of `bernstein demo`, real adapters run only behind `--real`; without it the scenario runs on mock adapters and costs nothing. |
 
 `bernstein quickstart` remains registered as a deprecated alias for the whole
 3.x line and is unregistered in 4.0.0.
@@ -81,14 +81,14 @@ Before starting, the command prints a cost estimate. The two spellings do not
 reach it the same way.
 
 `bernstein demo --flask-todo` follows `demo`'s rule. Without `--real` it runs on
-mock agents and prints `$0.00 (mock)` whatever agent CLIs are installed on the
+mock adapters and prints `$0.00 (mock)` whatever adapter CLIs are installed on the
 machine. With `--real` it prints roughly `$0.20` for the 3 tasks, and if no
 adapter can be resolved it stops rather than running on mock.
 
 The deprecated `bernstein quickstart` spelling has no `--real` option and keeps
-the behaviour it always had: it picks up an installed agent CLI by itself and
+the behaviour it always had: it picks up an installed adapter CLI by itself and
 prints `~$0.20`, falling back to `$0.00 (mock)` only when it finds none. On a
-machine with an agent CLI on PATH it therefore spends money with no flag asked
+machine with an adapter CLI on PATH it therefore spends money with no flag asked
 for. Pass `--adapter mock` to pin it, or move to `bernstein demo --flask-todo`.
 
 ## Source

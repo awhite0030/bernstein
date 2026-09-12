@@ -49,9 +49,9 @@ cloud sandbox that runs the project's devcontainer.
   You supply adapter API keys via your own Codespaces user secrets and
   are billed for compute by GitHub.
 - The devcontainer pre-installs `bernstein` and `pipx`, but it does not
-  install any third-party agent CLI. Pick whichever adapter you want
+  install any third-party adapter CLI. Pick whichever adapter you want
   (Claude Code, Codex, Gemini, etc.) and install it inside the
-  container before running an agent task.
+  container before running an adapter task.
 - A fresh container has no cached state. Plan-only or dry-run modes
   are a good way to confirm the setup before spending API budget.
 

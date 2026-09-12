@@ -24,7 +24,7 @@ group below is a section in the left nav with its own set of pages.
 
     ---
 
-    Wire in Claude Code, Codex, Gemini CLI, and 40+ other CLI agents.
+    Wire in Claude Code, Codex, Gemini CLI, and 40+ other CLI adapters.
 
     [:octicons-arrow-right-24: Adapters](../adapters/index.md)
 
@@ -88,7 +88,7 @@ group below is a section in the left nav with its own set of pages.
 
     ---
 
-    Run agents on Cloudflare's edge - Workers, R2, D1.
+    Run adapters on Cloudflare's edge - Workers, R2, D1.
 
     [:octicons-arrow-right-24: Cloudflare overview](../cloudflare/cloudflare-overview.md)
 

@@ -8,7 +8,7 @@ description: >-
   one governance surface, for any deliverable, with zero vendor lock-in.
 tags:
   - orchestration
-  - multi-agent
+  - multi-adapter
   - AI governance
   - AI coding agents
 search:
@@ -22,15 +22,15 @@ search:
 <a href="https://deepwiki.com/sipyourdrink-ltd/bernstein"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 
 <figure markdown>
-  ![A real bernstein demo run - mock agents fix four seeded bugs, ending on the run's signed receipt verifying offline](assets/demo-run/demo.gif){ loading=lazy width="820" }
+  ![A real bernstein demo run - mock adapters fix four seeded bugs, ending on the run's signed receipt verifying offline](assets/demo-run/demo.gif){ loading=lazy width="820" }
   <figcaption>A real recorded run - its signed receipt and public key ship next to this recording, and CI re-verifies them on every push</figcaption>
 </figure>
 
 ---
 
-Bernstein takes a goal, breaks it into tasks, assigns them to AI agents running in parallel, verifies the output, and merges the results. You come back to working code, passing tests, and a clean git history - or, when a task declares an artifact contract, to a signed deliverable: a research dossier, a dataset, an audit evidence pack.
+Bernstein takes a goal, breaks it into tasks, assigns them to AI adapters running in parallel, verifies the output, and merges the results. You come back to working code, passing tests, and a clean git history - or, when a task declares an artifact contract, to a signed deliverable: a research dossier, a dataset, an audit evidence pack.
 
-No framework to learn. No vendor lock-in. Agents are interchangeable workers - swap any agent, any model, any provider. The orchestrator itself is deterministic Python code. Zero LLM tokens on scheduling.
+No framework to learn. No vendor lock-in. Adapters are interchangeable workers - swap any adapter, any model, any provider. The orchestrator itself is deterministic Python code. Zero LLM tokens on scheduling.
 
 Results stay checkable after the run ends: an always-on lineage spine and replay journal record what happened, and an opt-in HMAC-chained audit log (`BERNSTEIN_AUDIT=1`) adds receipts you can verify offline.
 
@@ -71,7 +71,7 @@ bernstein -g "Add JWT auth with refresh tokens, tests, and API docs"
 
 A run in flight is watchable from either operator surface. Both read the same task API, so neither is a lagging mirror of the other.
 
-| ![A three-column terminal dashboard: agents with their live logs on the left, the task board on the right, an activity feed and a cost line underneath](assets/tui-agents.png) | ![A browser dashboard listing sixty-two tasks with eleven running, one of them opened to its working-tree diff](assets/webui-agents-diffs.png) |
+| ![A three-column terminal dashboard: adapters with their live logs on the left, the task board on the right, an activity feed and a cost line underneath](assets/tui-agents.png) | ![A browser dashboard listing sixty-two tasks with eleven running, one of them opened to its working-tree diff](assets/webui-agents-diffs.png) |
 |:---:|:---:|
 | `bernstein live` — the terminal dashboard | `bernstein gui serve` — the same run in a browser |
 
@@ -94,7 +94,7 @@ A run in flight is watchable from either operator surface. Both read the same ta
     Set `BERNSTEIN_AUDIT=1` (or pass `--audit` to `bernstein run`) for an
     HMAC-chained audit log and receipts you can verify offline.
 
-- :material-swap-horizontal:{ .lg .middle } **Any agent, any model**
+- :material-swap-horizontal:{ .lg .middle } **Any adapter, any model**
 
     ---
 
@@ -105,7 +105,7 @@ A run in flight is watchable from either operator surface. Both read the same ta
 
     ---
 
-    Each coding agent works in its own git worktree
+    Each coding adapter works in its own git worktree
     (artifact-mode tasks get an isolated plain directory).
     No merge conflicts. Clean history. Parallel by default.
 
@@ -114,7 +114,7 @@ A run in flight is watchable from either operator surface. Both read the same ta
     ---
 
     Janitor system checks tests, lint, types, and PII
-    before any agent output lands in your codebase.
+    before any adapter output lands in your codebase.
 
 </div>
 
@@ -122,9 +122,9 @@ A run in flight is watchable from either operator surface. Both read the same ta
 
 Bernstein is built for the forward-deployed engineering pattern:
 parachute onto a client repo and stand up an AI engineering crew in
-minutes. State lives in `.sdd/` - no server to provision. Per-agent
+minutes. State lives in `.sdd/` - no server to provision. Per-adapter
 credential scoping keeps your keys out of the client's environment.
-The broad adapter spread means the swarm runs on whichever CLI agent
+The broad adapter spread means the swarm runs on whichever CLI adapter
 the client already trusts (Claude Code, Codex, Gemini CLI, Aider,
 and more). Every step is an HMAC-signed audit record, replayable
 for client compliance review.
@@ -136,10 +136,10 @@ for client compliance review.
 | :material-rocket-launch: [Install](getting-started/install.md) | Get Bernstein installed and verify it runs |
 | :material-play-circle: [First run](getting-started/first-run.md) | Take Bernstein from "installed" to "first orchestrated task complete" |
 | :material-wrench: [Configuration](operations/CONFIG.md) | bernstein.yaml reference |
-| :material-puzzle: [Adapter Guide](adapters/ADAPTER_GUIDE.md) | Supported agents and how to add your own |
+| :material-puzzle: [Adapter Guide](adapters/ADAPTER_GUIDE.md) | Supported adapters and how to add your own |
 | :material-api: [API Reference](reference/openapi-reference.md) | Task server REST API |
 | :material-sitemap: [Architecture](architecture/ARCHITECTURE.md) | How Bernstein works under the hood |
-| :material-state-machine: [Lifecycle FSM](architecture/LIFECYCLE.md) | Task and agent state machines with transition tables |
+| :material-state-machine: [Lifecycle FSM](architecture/LIFECYCLE.md) | Task and adapter state machines with transition tables |
 | :material-text-box-check: [What's New](whats-new.md) | Pointer to per-release notes under `docs/release-notes/` |
 | :material-history: [Release notes](release-notes/unreleased.md) | One page per tagged version, plus what has landed since the newest tag |
 | :material-shield-lock: [Air-gap installation](installation/air-gap.md) | Wheelhouse build, signed verification, `--profile airgap`, deny-all egress |

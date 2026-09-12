@@ -16,11 +16,11 @@ to follow the [first-run walkthrough](first-run.md).
 ## Requirements
 
 - **Python 3.12 or later**. `python3 --version` to check.
-- **Git** (any recent version). Bernstein uses git worktrees to isolate agents.
+- **Git** (any recent version). Bernstein uses git worktrees to isolate adapters.
 - **macOS, Linux, or Windows**.
 
 That's it for installing. Before your **first run** you will also need at least one
-CLI coding agent (Claude Code, Codex CLI, Gemini CLI, ...) and its API key - the
+CLI coding adapter (Claude Code, Codex CLI, Gemini CLI, ...) and its API key - the
 [first-run walkthrough](first-run.md) covers that. You do **not** need them to
 complete this page.
 
@@ -35,11 +35,11 @@ complete this page.
 Windows notes:
 
 - Worktree directory sharing via symlinks (`node_modules`, `.venv`) requires
-  Developer Mode or Administrator privileges; without it, agents fall back to
+  Developer Mode or Administrator privileges; without it, adapters fall back to
   per-worktree installs.
 - Deep worktree paths are handled with extended-length path support; no
   registry changes are needed.
-- Forced agent stops are recorded in the audit chain with the same receipt
+- Forced adapter stops are recorded in the audit chain with the same receipt
   format on every platform, so run histories verify identically across
   mixed-OS teams.
 
@@ -197,10 +197,10 @@ You should see the current release version. Then run the pre-flight check:
 bernstein doctor
 ```
 
-`doctor` checks your setup end to end: installed agent CLIs (adapters), API keys,
+`doctor` checks your setup end to end: installed adapter CLIs (adapters), API keys,
 port availability, the `.sdd` workspace, and supporting tools.
 
-Straight after an install - before you have configured an agent CLI or an API
+Straight after an install - before you have configured an adapter CLI or an API
 key - **expect red rows** for adapters, auth, the workspace, and "Ready to run",
 and a non-zero exit code. Those clear as you work through the
 [first run](first-run.md). At this stage you only need `bernstein --version`
