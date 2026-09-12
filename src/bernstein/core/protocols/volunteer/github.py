@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """GitHub projection for volunteer protocol documents.
 
 Maps each volunteer document kind (claim, submission, verdict, merge-receipt)

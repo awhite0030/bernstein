@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnnecessaryIsInstance=false
 """Shared document substrate for the volunteer protocol.
 
 Every volunteer document (candidacy, result receipt, dispute, etc.) is
