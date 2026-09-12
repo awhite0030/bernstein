@@ -190,7 +190,7 @@ configuring anything.
 (Step 1) and run its login flow. Then:
 
 ```bash
-bernstein adapters list    # rescan adapter-role catalogs
+bernstein agents discover    # rescan adapter-role catalogs
 bernstein doctor             # confirm adapters + auth are green
 ```
 

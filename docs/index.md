@@ -1,7 +1,7 @@
 ---
-title: Bernstein - The Open-Source Governance Layer for AI Adapters
+title: Bernstein - The Open-Source Governance Layer for AI Agents
 description: >-
-  The open-source governance layer for AI adapters. No model in the coordination
+  The open-source governance layer for AI agents. No model in the coordination
   loop, so replaying a plan reproduces its task graph byte-identically.
   Signed lineage plus an opt-in HMAC audit chain a reviewer checks offline,
   without rerunning it. Run Claude Code, Codex, Gemini CLI, and 40+ more behind
@@ -10,14 +10,14 @@ tags:
   - orchestration
   - multi-adapter
   - AI governance
-  - AI coding adapters
+  - AI coding agents
 search:
   boost: 2
 ---
 
 # Bernstein
 
-**Reproducible multi-adapter runs. Verifiable results. Any adapter, any deliverable.**
+**Reproducible multi-agent runs. Verifiable results. Any agent, any deliverable.**
 
 <a href="https://deepwiki.com/sipyourdrink-ltd/bernstein"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 

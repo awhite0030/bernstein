@@ -362,7 +362,7 @@ Bernstein detects stalled adapters automatically and retries the task. To check 
 
 ```bash
 bernstein status --mode expert   # Show adapter detail, including heartbeats
-bernstein adapters list-status        # List available adapters and their status
+bernstein agents showcase        # List available adapters grouped by role
 ```
 
 ### "bernstein init fails - not a git repository"
