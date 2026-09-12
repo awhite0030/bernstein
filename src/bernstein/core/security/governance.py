@@ -247,7 +247,7 @@ class GovernanceDecision:
     verdict: str
     inputs_hash: str
     timestamp: int
-    context: dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict) # type: ignore
     journal_entry_hash: str = ""
 
     def _binding(self) -> dict[str, Any]:
@@ -272,8 +272,8 @@ class GovernanceDecision:
 
     @classmethod
     def from_dict(cls, row: dict[str, Any]) -> GovernanceDecision:
-        raw_context = row.get("context") or {}
-        context = dict(raw_context) if isinstance(raw_context, dict) else {}
+        raw_context = row.get("context") or {} # type: ignore
+        context: dict[str, Any] = dict(raw_context) if isinstance(raw_context, dict) else {} # type: ignore
         return cls(
             run_id=str(row["run_id"]),
             subject=str(row["subject"]),
