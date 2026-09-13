@@ -1,0 +1,38 @@
+[
+  {
+    "gap": "tool calls",
+    "why": "no per-call identity record — `mcp_gateway.py:393` short-circuits",
+    "issue": 5062,
+    "resolved": false
+  },
+  {
+    "gap": "delegation",
+    "why": "no grant chain is written — `delegation.py:505` has no caller",
+    "issue": 5047,
+    "resolved": false
+  },
+  {
+    "gap": "policy version",
+    "why": "decisions name no policy",
+    "issue": 5060,
+    "resolved": false
+  },
+  {
+    "gap": "approvals",
+    "why": "the gate is off by default",
+    "issue": 5051,
+    "resolved": false
+  },
+  {
+    "gap": "sensitivity",
+    "why": "taint flows in, sensitivity does not flow out",
+    "issue": 5042,
+    "resolved": false
+  },
+  {
+    "gap": "permitted models",
+    "why": "no record of which models an install may use",
+    "issue": 5038,
+    "resolved": false
+  }
+]
