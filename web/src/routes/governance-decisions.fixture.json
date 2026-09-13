@@ -1,0 +1,50 @@
+[
+  {
+    "v": 1,
+    "run_id": "run-2026-09-01T18:22:04Z-a1f3c9",
+    "subject": "service-agent",
+    "action": "execute_task",
+    "verdict": "allow",
+    "inputs_hash": "a1b2c3d4e5f6",
+    "timestamp": 1728203000,
+    "context": {},
+    "journal_entry_hash": "sha256:1122334455667788"
+  },
+  {
+    "v": 1,
+    "run_id": "run-2026-09-01T18:22:04Z-a1f3c9",
+    "subject": "service-agent",
+    "action": "budget",
+    "verdict": "refuse",
+    "inputs_hash": "b2c3d4e5f6a1",
+    "timestamp": 1728203010,
+    "context": {
+      "cap_usd": 10.0,
+      "next_cost_usd": 5.0,
+      "dimension": "agent"
+    },
+    "journal_entry_hash": "sha256:99aabbccddeeff"
+  },
+  {
+    "v": 1,
+    "run_id": "run-2026-09-01T18:22:04Z-a1f3c9",
+    "subject": "guest",
+    "action": "read_secret",
+    "verdict": "deny",
+    "inputs_hash": "c3d4e5f6a1b2",
+    "timestamp": 1728203020,
+    "context": {},
+    "journal_entry_hash": "sha256:aa11bb22cc33dd"
+  },
+  {
+    "v": 1,
+    "run_id": "run-2026-09-01T18:22:04Z-a1f3c9",
+    "subject": "audit-agent",
+    "action": "execute_task",
+    "verdict": "allow",
+    "inputs_hash": "d4e5f6a1b2c3",
+    "timestamp": 1728203030,
+    "context": {},
+    "journal_entry_hash": ""
+  }
+]

@@ -22,6 +22,8 @@
 
 import { Pill, SectionLabel } from '@/lib/states';
 import fixture from './governance-coverage.fixture.json';
+import decisionsFixture from './governance-decisions.fixture.json';
+import { GovernanceDecisionRow } from '@/components/governance/GovernanceDecision';
 
 export type CoverageMetric = {
   id: string;
@@ -163,6 +165,21 @@ export function GovernancePanel({ coverage }: { coverage: CoverageReport }) {
         {coverage.metrics.map((metric) => (
           <MetricRow key={metric.id} metric={metric} />
         ))}
+      </section>
+
+      <header className="space-y-2 mt-8">
+        <SectionLabel>
+          decisions
+        </SectionLabel>
+        <p className="max-w-3xl text-body text-muted-foreground">
+          The recorded decisions.
+        </p>
+      </header>
+
+      <section className="rounded-md border border-border bg-card px-4 py-1">
+         {decisionsFixture.map((decision) => (
+            <GovernanceDecisionRow key={decision.inputs_hash} decision={decision} />
+         ))}
       </section>
     </div>
   );
