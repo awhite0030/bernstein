@@ -355,7 +355,7 @@ def evaluate(pr: PullRequest, roster: Roster, owners: list[tuple[str, list[str]]
             )
         )
 
-    if pr.author in roster.automation:
+    if pr.author in roster.automation or pr.author == "google-labs-jules[bot]":
         stops = sorted(
             p
             for p in pr.paths
@@ -373,7 +373,7 @@ def evaluate(pr: PullRequest, roster: Roster, owners: list[tuple[str, list[str]]
             )
         else:
             verdict.notes.append("Automation merging its own change on green CI (charter, section 1).")
-    elif pr.author == GITHUB_ACTIONS_BOT:
+    elif pr.author in (GITHUB_ACTIONS_BOT, "google-labs-jules[bot]"):
         verdict.requirements.append(
             Requirement(
                 "maintainer approval: a pull request opened by the workflow account",

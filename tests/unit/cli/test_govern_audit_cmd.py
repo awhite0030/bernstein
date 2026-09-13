@@ -89,10 +89,8 @@ def test_govern_audit_rejects_an_unknown_selector(project: Path) -> None:
     assert result.exit_code != 0
     assert "XYZ" in result.output
 
-from unittest.mock import patch
-
 from bernstein.core.govern.audit_sweep import CheckOutcome, CheckVerdict
-
+from unittest.mock import patch
 
 def test_govern_audit_exit_code_zero(project: Path) -> None:
     """Exit code 0 when every required check is measured/passed or declared."""
