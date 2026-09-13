@@ -37,7 +37,6 @@ export type CoverageMetric = {
   unmeasured_reason: string | null;
 };
 
-
 export type CoverageGap = {
   gap: string;
   why: string;
@@ -141,7 +140,6 @@ function MetricRow({ metric }: { metric: CoverageMetric }) {
   );
 }
 
-
 function GapRow({ gap }: { gap: CoverageGap }) {
   const issueUrl = `https://github.com/sipyourdrink-ltd/bernstein/issues/${gap.issue}`;
   return (
@@ -219,5 +217,5 @@ export function GovernancePanel({ coverage, gaps = [] }: { coverage: CoverageRep
 }
 
 export default function Governance() {
-  return <GovernancePanel coverage={coverageFixture} gaps={gapsFixture as CoverageGap[]} />;
+  return <GovernancePanel coverage={coverageFixture} gaps={gapsFixture} />;
 }
