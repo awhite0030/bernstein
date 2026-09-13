@@ -570,7 +570,7 @@ def _parse_playbook_json(raw_output: str) -> dict[str, object]:
     if not isinstance(result, dict):
         raise ValueError(f"Model output must be a JSON object, got {type(result).__name__}")
 
-    return result
+    return cast("dict[str, object]", result)
 
 
 @govern_group.command("discover")
@@ -685,7 +685,7 @@ def govern_discover_cmd(
         model = "nvidia/nemotron-3-super-120b-a12b"
         provider = "openrouter_free"
 
-    from bernstein.core.llm import call_llm
+    from bernstein.core.routing.llm import call_llm
 
     console.print(f"  Model: {model} ({provider})")
 
