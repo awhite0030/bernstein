@@ -177,6 +177,7 @@ test('the committed fixture exercises both the measured and the not-measured sta
   }
 });
 
+
 // Gaps list tests
 test('the panel renders an empty gaps list as nothing known to be uncovered', async (t) => {
   const { GovernancePanel } = await loadPanel(t);
