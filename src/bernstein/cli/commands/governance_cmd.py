@@ -891,14 +891,32 @@ def governance_ingest_cmd(
     help="Mark which check ids this framework requires. Selects ids only; asserts nothing.",
 )
 @click.option("--list", "list_only", is_flag=True, help="Print the registered check ids and exit.")
-@click.option("--json-output", "as_json", is_flag=True, help="Print the report as JSON and nothing else.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json", "sarif"]),
+    default="text",
+    help="Emit the report as text (default), JSON, or SARIF.",
+)
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit 2 if any required check is not_measurable.",
+)
+@click.option(
+    "--quiet",
+    is_flag=True,
+    help="Print nothing; the exit code is the whole answer.",
+)
 def govern_audit_cmd(
     workdir: Path,
     only: tuple[str, ...],
     skip: tuple[str, ...],
     profile: str | None,
     list_only: bool,
-    as_json: bool,
+    output_format: str,
+    strict: bool,
+    quiet: bool,
 ) -> None:
     """Run every registered check over this install and report one finding each.
 
@@ -921,13 +939,33 @@ def govern_audit_cmd(
     specs = {spec.check_id: spec for spec in iter_compliance_checks()}
 
     if list_only:
-        _print_audit_catalogue([specs[cid] for cid in selected], required, as_json=as_json)
+        if not quiet:
+            _print_audit_catalogue([specs[cid] for cid in selected], required, as_json=(output_format == "json"))
         return
 
     outcomes = run_compliance_checks(workdir, only=only, skip=skip)
     counts = count_by_outcome(outcomes)
 
-    if as_json:
+    exit_code = 0
+    if required:
+        has_failed = False
+        has_unmeasurable = False
+        for outcome in outcomes:
+            if outcome.check_id in required:
+                if outcome.verdict is CheckVerdict.MEASURED and not outcome.passed:
+                    has_failed = True
+                elif outcome.verdict is CheckVerdict.NOT_MEASURABLE:
+                    has_unmeasurable = True
+
+        if strict and has_unmeasurable:
+            exit_code = 2
+        elif has_failed:
+            exit_code = 1
+
+    if quiet:
+        raise SystemExit(exit_code)
+
+    if output_format == "json":
         click.echo(
             json.dumps(
                 {
@@ -942,7 +980,37 @@ def govern_audit_cmd(
                 indent=2,
             )
         )
-        return
+        raise SystemExit(exit_code)
+
+    if output_format == "sarif":
+        click.echo(
+            json.dumps(
+                {
+                    "version": "2.1.0",
+                    "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+                    "runs": [
+                        {
+                            "tool": {
+                                "driver": {
+                                    "name": "bernstein",
+                                }
+                            },
+                            "results": [
+                                {
+                                    "ruleId": outcome.check_id,
+                                    "kind": outcome.verdict.value,
+                                    "message": {"text": outcome.summary},
+                                }
+                                for outcome in outcomes
+                            ],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        raise SystemExit(exit_code)
 
     click.echo(f"govern audit-compliance -- area {CMP_AREA}, {len(outcomes)} checks over {workdir}")
     click.echo("")
@@ -962,6 +1030,8 @@ def govern_audit_cmd(
             f"{len(required & {o.check_id for o in outcomes})} of {total} ids "
             "(marked *; the profile selects ids and states nothing about the result)"
         )
+
+    raise SystemExit(exit_code)
 
 
 def _print_audit_catalogue(

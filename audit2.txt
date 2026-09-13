@@ -1,0 +1,81 @@
+895:def govern_audit_cmd(
+896-    workdir: Path,
+897-    only: tuple[str, ...],
+898-    skip: tuple[str, ...],
+899-    profile: str | None,
+900-    list_only: bool,
+901-    as_json: bool,
+902-) -> None:
+903-    """Run every registered check over this install and report one finding each.
+904-
+905-    Each finding carries a stable id, one of three verdicts -- measured,
+906-    declared, or not measurable -- and the evidence it read. A check that only
+907-    tests whether a key is present in a configuration file reports *declared*:
+908-    the operator asserted the control and nothing was read that confirms it.
+909-
+910-    There is no score and no grade. Every count names its denominator, and
+911-    --profile selects which ids a framework requires without asserting anything
+912-    about the result.
+913-    """
+914-    required: frozenset[str] = required_check_ids(ComplianceFramework(profile.lower())) if profile else frozenset()
+915-
+916-    try:
+917-        selected = select_check_ids(only=only, skip=skip)
+918-    except ValueError as exc:
+919-        raise click.ClickException(str(exc)) from exc
+920-
+921-    specs = {spec.check_id: spec for spec in iter_compliance_checks()}
+922-
+923-    if list_only:
+924-        _print_audit_catalogue([specs[cid] for cid in selected], required, as_json=as_json)
+925-        return
+926-
+927-    outcomes = run_compliance_checks(workdir, only=only, skip=skip)
+928-    counts = count_by_outcome(outcomes)
+929-
+930-    if as_json:
+931-        click.echo(
+932-            json.dumps(
+933-                {
+934-                    "schema_version": 1,
+935-                    "area": CMP_AREA,
+936-                    "profile": profile.lower() if profile else None,
+937-                    "checks_run": len(outcomes),
+938-                    "checks": [outcome.to_dict() | {"required": outcome.check_id in required} for outcome in outcomes],
+939-                    "counts": counts,
+940-                },
+941-                ensure_ascii=False,
+942-                indent=2,
+943-            )
+944-        )
+945-        return
+946-
+947-    click.echo(f"govern audit-compliance -- area {CMP_AREA}, {len(outcomes)} checks over {workdir}")
+948-    click.echo("")
+949-    for outcome in outcomes:
+950-        marker = "*" if outcome.check_id in required else " "
+951-        state = "pass" if outcome.passed else "fail"
+952-        verdict = outcome.verdict.value if outcome.verdict is not CheckVerdict.MEASURED else f"measured {state}"
+953-        click.echo(f"  {marker}{outcome.check_id}  {verdict:<14}  {outcome.summary}")
+954-    click.echo("")
+955-    total = len(outcomes)
+956-    for label, count in counts.items():
+957-        click.echo(f"  {label.replace('_', ' ')}: {count} of {total} checks")
+958-    if profile:
+959-        click.echo("")
+960-        click.echo(
+961-            f"  required by profile {profile.lower()}: "
+962-            f"{len(required & {o.check_id for o in outcomes})} of {total} ids "
+963-            "(marked *; the profile selects ids and states nothing about the result)"
+964-        )
+965-
+966-
+967-def _print_audit_catalogue(
+968-    specs: list[ComplianceCheckSpec],
+969-    required: frozenset[str],
+970-    *,
+971-    as_json: bool,
+972-) -> None:
+973-    """Print the registered check ids without running any of them."""
+974-    if as_json:
+975-        click.echo(
