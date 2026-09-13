@@ -1,0 +1,4 @@
+Root cause: The previous attempt introduced `call_llm` to `governance_cmd.py` using an unresolved import path (`bernstein.core.llm` instead of `bernstein.core.routing.llm`) and omitted the required casting for the returned `json.loads` output, causing `pyright` to fail.
+Fix: Corrected the `call_llm` import path to `bernstein.core.routing.llm` and cast the `json.loads` result to `dict[str, object]` to resolve type-checking errors in `src/bernstein/cli/commands/governance_cmd.py`.
+Validation: Ran `uv run pyright src/bernstein/cli/commands/governance_cmd.py` and `uv run pyright src/bernstein/core/govern/duplication_audit.py` (0 errors). Also verified `uv run ruff check src/`, `uv run lint-imports`, and `uv run python scripts/run_tests.py -x tests/unit/core/govern/test_duplication_audit.py` successfully pass.
+Fixes https://github.com/sipyourdrink-ltd/bernstein/issues/5105
