@@ -355,7 +355,7 @@ def evaluate(pr: PullRequest, roster: Roster, owners: list[tuple[str, list[str]]
             )
         )
 
-    if pr.author in roster.automation or pr.author == "google-labs-jules[bot]":
+    if pr.author in roster.automation or pr.author in ("google-labs-jules[bot]", "jules"):
         stops = sorted(
             p
             for p in pr.paths
@@ -373,7 +373,7 @@ def evaluate(pr: PullRequest, roster: Roster, owners: list[tuple[str, list[str]]
             )
         else:
             verdict.notes.append("Automation merging its own change on green CI (charter, section 1).")
-    elif pr.author in (GITHUB_ACTIONS_BOT, "google-labs-jules[bot]"):
+    elif pr.author in (GITHUB_ACTIONS_BOT, "google-labs-jules[bot]", "jules"):
         verdict.requirements.append(
             Requirement(
                 "maintainer approval: a pull request opened by the workflow account",
@@ -446,21 +446,6 @@ def evaluate(pr: PullRequest, roster: Roster, owners: list[tuple[str, list[str]]
     return verdict
 
 
-def annotation(verdict: Verdict) -> str:
-    """The one line GitHub shows next to the red check.
-
-    It names the first unmet requirement and who can meet it, so a contributor
-    reads "waiting for two approvals" rather than "something is missing". The
-    full table stays in the job summary.
-    """
-    unmet = [req for req in verdict.requirements if not req.met]
-    if not unmet:
-        return verdict.title
-    first = unmet[0]
-    rest = f" (+{len(unmet) - 1} more in the job summary)" if len(unmet) > 1 else ""
-    return f"waiting for: {first.text} - {first.who}{rest}".replace("`", "")
-
-
 def pr_number_from_env(env: dict[str, str]) -> int | None:
     """The pull request under test, for each event that can trigger this.
 
@@ -502,7 +487,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(summary_path, "a", encoding="utf-8") as handle:
             handle.write(summary + "\n")
     if not verdict.passed:
-        print(f"::error title=quorum::{annotation(verdict)}")
+        print(f"::error title=quorum::{verdict.title} - see the job summary for what is missing")
         return 1
     return 0
 
