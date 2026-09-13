@@ -998,7 +998,11 @@ def govern_audit_cmd(
                             "results": [
                                 {
                                     "ruleId": outcome.check_id,
-                                    "kind": outcome.verdict.value,
+                                    "kind": "pass"
+                                    if outcome.passed
+                                    else "fail"
+                                    if outcome.verdict is CheckVerdict.MEASURED
+                                    else "notApplicable",
                                     "message": {"text": outcome.summary},
                                 }
                                 for outcome in outcomes
