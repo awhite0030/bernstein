@@ -1240,7 +1240,7 @@ def trace_follow_cmd(
     from bernstein.core.persistence.work_ledger import LedgerReader, run_ledger_dir
     from bernstein.core.security.audit_chain import AuditChainStore
 
-    def _entity_in_dict(d, entity_id):
+    def _entity_in_dict(d: object, entity_id: str) -> bool:
         if isinstance(d, dict):
             return any(_entity_in_dict(v, entity_id) for v in d.values())
         if isinstance(d, list):
@@ -1254,13 +1254,13 @@ def trace_follow_cmd(
     # spellings by which an index row can reference an entity.
     trace_matches = store.search(text=entity_id)
 
-    entries = []
+    entries: list[dict[str, object]] = []
     for entry in trace_matches:
         d = entry.to_dict()
         entries.append(
             {
-                "started_at": entry.started_at,
-                "entry_id": entry.trace_id,
+                "started_at": float(entry.started_at or 0.0),
+                "entry_id": str(entry.trace_id),
                 "source": "trace_store",
                 "body": d,
             }
@@ -1288,8 +1288,8 @@ def trace_follow_cmd(
                     ts = 0.0
                 entries.append(
                     {
-                        "started_at": ts,
-                        "entry_id": getattr(event, "hmac", ""),
+                        "started_at": float(ts),
+                        "entry_id": str(getattr(event, "hmac", "")),
                         "source": "audit_chain",
                         "body": d,
                     }
@@ -1314,8 +1314,8 @@ def trace_follow_cmd(
                     if _entity_in_dict(d, entity_id):
                         entries.append(
                             {
-                                "started_at": entry.ts,
-                                "entry_id": entry.entry_hash,
+                                "started_at": float(entry.ts),
+                                "entry_id": str(entry.entry_hash),
                                 "source": "work_ledger",
                                 "body": d,
                             }
@@ -1333,11 +1333,11 @@ def trace_follow_cmd(
     # Sorted rather than index order: `reindex` rebuilds by walking the blob
     # tree, so the file's order is a filesystem artefact and would make the
     # same finished run print differently after a rebuild.
-    entries.sort(key=lambda entry: (entry["started_at"], entry["entry_id"]))
+    entries.sort(key=lambda entry: (float(str(entry["started_at"])), str(entry["entry_id"])))
 
     if since:
         found = False
-        filtered = []
+        filtered: list[dict[str, object]] = []
         for entry in entries:
             if found:
                 filtered.append(entry)
@@ -1365,33 +1365,32 @@ def trace_follow_cmd(
         table.add_column("Model")
         table.add_column("Bytes", justify="right")
         for entry in entries:
-            if entry["source"] == "trace_store":
-                d = entry["body"]
-                table.add_row(
-                    _trace_timestamp(d.get("started_at", 0)),
-                    d.get("trace_id", "-"),
-                    d.get("task_id", "-"),
-                    d.get("model", "-"),
-                    str(d.get("byte_size", 0)),
-                )
-            elif entry["source"] == "audit_chain":
-                d = entry["body"]
-                table.add_row(
-                    _trace_timestamp(entry["started_at"]),
-                    d.get("hmac", "-")[:12],
-                    d.get("resource_id", "-"),
-                    "audit_chain",
-                    str(len(json.dumps(d))),
-                )
-            elif entry["source"] == "work_ledger":
-                d = entry["body"]
-                table.add_row(
-                    _trace_timestamp(entry["started_at"]),
-                    d.get("entry_hash", "-")[:12],
-                    d.get("task_id", "-"),
-                    "work_ledger",
-                    str(len(json.dumps(d))),
-                )
+            d = entry["body"]
+            if isinstance(d, dict):
+                if entry["source"] == "trace_store":
+                    table.add_row(
+                        _trace_timestamp(float(str(d.get("started_at", 0) or 0))),
+                        str(d.get("trace_id", "-")),
+                        str(d.get("task_id", "-")),
+                        str(d.get("model", "-")),
+                        str(d.get("byte_size", 0)),
+                    )
+                elif entry["source"] == "audit_chain":
+                    table.add_row(
+                        _trace_timestamp(float(str(entry.get("started_at", "0")))),
+                        str(d.get("hmac", "-"))[:12],
+                        str(d.get("resource_id", "-")),
+                        "audit_chain",
+                        str(len(json.dumps(d))),
+                    )
+                elif entry["source"] == "work_ledger":
+                    table.add_row(
+                        _trace_timestamp(float(str(entry.get("started_at", "0")))),
+                        str(d.get("entry_hash", "-"))[:12],
+                        str(d.get("task_id", "-")),
+                        "work_ledger",
+                        str(len(json.dumps(d))),
+                    )
         console.print(table)
         suffix = "y" if len(entries) == 1 else "ies"
         console.print(f"[dim]{len(entries)} entr{suffix}[/dim]")
@@ -1426,13 +1425,13 @@ def trace_follow_cmd(
 
         # Repoll
         trace_matches = store.search(text=entity_id)
-        new_entries = []
+        new_entries: list[dict[str, object]] = []
         for entry in trace_matches:
             d = entry.to_dict()
             new_entries.append(
                 {
-                    "started_at": entry.started_at,
-                    "entry_id": entry.trace_id,
+                    "started_at": float(entry.started_at or 0.0),
+                    "entry_id": str(entry.trace_id),
                     "source": "trace_store",
                     "body": d,
                 }
@@ -1459,8 +1458,8 @@ def trace_follow_cmd(
                         ts = 0.0
                     new_entries.append(
                         {
-                            "started_at": ts,
-                            "entry_id": getattr(event, "hmac", ""),
+                            "started_at": float(ts),
+                            "entry_id": str(getattr(event, "hmac", "")),
                             "source": "audit_chain",
                             "body": d,
                         }
@@ -1482,8 +1481,8 @@ def trace_follow_cmd(
                         if _entity_in_dict(d, entity_id):
                             new_entries.append(
                                 {
-                                    "started_at": entry.ts,
-                                    "entry_id": entry.entry_hash,
+                                    "started_at": float(entry.ts),
+                                    "entry_id": str(entry.entry_hash),
                                     "source": "work_ledger",
                                     "body": d,
                                 }
@@ -1493,11 +1492,11 @@ def trace_follow_cmd(
         except Exception:
             pass
 
-        new_entries.sort(key=lambda entry: (entry["started_at"], entry["entry_id"]))
+        new_entries.sort(key=lambda entry: (float(str(entry["started_at"])), str(entry["entry_id"])))
 
         # Filter new entries
-        seen_ids = {e["entry_id"] for e in entries}
-        filtered_new = [e for e in new_entries if e["entry_id"] not in seen_ids]
+        seen_ids = {str(e["entry_id"]) for e in entries}
+        filtered_new = [e for e in new_entries if str(e["entry_id"]) not in seen_ids]
 
         if not filtered_new:
             continue
@@ -1506,6 +1505,7 @@ def trace_follow_cmd(
             for entry in filtered_new:
                 console.print_json(json.dumps(entry["body"]))
         else:
+            from rich.table import Table
             table = Table(show_header=False)
             table.add_column("Started")
             table.add_column("Trace")
@@ -1513,33 +1513,32 @@ def trace_follow_cmd(
             table.add_column("Model")
             table.add_column("Bytes", justify="right")
             for entry in filtered_new:
-                if entry["source"] == "trace_store":
-                    d = entry["body"]
-                    table.add_row(
-                        _trace_timestamp(d.get("started_at", 0)),
-                        d.get("trace_id", "-"),
-                        d.get("task_id", "-"),
-                        d.get("model", "-"),
-                        str(d.get("byte_size", 0)),
-                    )
-                elif entry["source"] == "audit_chain":
-                    d = entry["body"]
-                    table.add_row(
-                        _trace_timestamp(entry["started_at"]),
-                        d.get("hmac", "-")[:12],
-                        d.get("resource_id", "-"),
-                        "audit_chain",
-                        str(len(json.dumps(d))),
-                    )
-                elif entry["source"] == "work_ledger":
-                    d = entry["body"]
-                    table.add_row(
-                        _trace_timestamp(entry["started_at"]),
-                        d.get("entry_hash", "-")[:12],
-                        d.get("task_id", "-"),
-                        "work_ledger",
-                        str(len(json.dumps(d))),
-                    )
+                d = entry["body"]
+                if isinstance(d, dict):
+                    if entry["source"] == "trace_store":
+                        table.add_row(
+                            _trace_timestamp(float(str(d.get("started_at", 0) or 0))),
+                            str(d.get("trace_id", "-")),
+                            str(d.get("task_id", "-")),
+                            str(d.get("model", "-")),
+                            str(d.get("byte_size", 0)),
+                        )
+                    elif entry["source"] == "audit_chain":
+                        table.add_row(
+                            _trace_timestamp(float(str(entry.get("started_at", "0")))),
+                            str(d.get("hmac", "-"))[:12],
+                            str(d.get("resource_id", "-")),
+                            "audit_chain",
+                            str(len(json.dumps(d))),
+                        )
+                    elif entry["source"] == "work_ledger":
+                        table.add_row(
+                            _trace_timestamp(float(str(entry.get("started_at", "0")))),
+                            str(d.get("entry_hash", "-"))[:12],
+                            str(d.get("task_id", "-")),
+                            "work_ledger",
+                            str(len(json.dumps(d))),
+                        )
             console.print(table)
 
         if out_path:
