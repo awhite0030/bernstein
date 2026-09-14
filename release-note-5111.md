@@ -1,0 +1,1 @@
+Added logic to compute the affected test and source lists once per CI run in `determine-changes` instead of per matrix cell, reducing test startup duplication and generating explicit "nothing affected" steps when zero tests/sources are implicated. Re-export transitive dependency resolution is now regression-tested.
