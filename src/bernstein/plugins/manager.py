@@ -22,7 +22,7 @@ from typing import Any, ClassVar, cast
 
 import pluggy
 
-from bernstein.core.hook_protocol import (
+from bernstein.core.config.hook_protocol import (
     HookValidationError,
     merge_hook_payload,
     normalize_hook_response,
@@ -30,13 +30,13 @@ from bernstein.core.hook_protocol import (
     substitute_template_vars,
     validate_hook_payload,
 )
-from bernstein.core.plugin_policy import (
+from bernstein.core.persistence.workspace import is_workspace_trusted
+from bernstein.core.security.plugin_policy import (
     PluginPolicy,
     PluginPolicyViolation,
     check_plugin_allowed,
     load_plugin_policy,
 )
-from bernstein.core.workspace import is_workspace_trusted
 from bernstein.plugins import hookimpl
 from bernstein.plugins.hookspecs import (
     BernsteinSpec,
@@ -74,7 +74,7 @@ type _CAST_LIST_OBJ = list[object]
 
 def _mcp_entry_from_dict(d: dict[str, Any]) -> Any:
     """Build an MCPServerEntry from a raw dict."""
-    from bernstein.core.mcp_registry import MCPServerEntry
+    from bernstein.core.protocols.mcp.mcp_registry import MCPServerEntry
 
     return MCPServerEntry(
         name=str(d["name"]),
@@ -246,7 +246,7 @@ class CommandHook:
         Returns:
             Dict mapping variable names (without ${}) to resolved values.
         """
-        from bernstein.core.home import BernsteinHome
+        from bernstein.core.config.home import BernsteinHome
 
         home_dir: BernsteinHome = BernsteinHome.default()
 
@@ -1090,7 +1090,7 @@ class PluginManager:
     @staticmethod
     def _register_plugin_mcp_servers(plugin_name: str, plugin: object, registry: object) -> None:
         """Parse and register MCP servers from a single plugin."""
-        from bernstein.core.mcp_registry import MCPServerEntry
+        from bernstein.core.protocols.mcp.mcp_registry import MCPServerEntry
 
         # Duck-typed plugin surface: the caller gates on hasattr before
         # dispatching, and `plugin` is deliberately `object` so a plugin

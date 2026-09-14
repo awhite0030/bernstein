@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from bernstein.core.policy_engine import PermissionDecision
+    from bernstein.core.security.policy_engine import PermissionDecision
 
 
 @dataclass
