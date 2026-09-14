@@ -1269,6 +1269,7 @@ def trace_follow_cmd(
     audit_store = AuditChainStore(sdd_dir / "audit")
     try:
         import dataclasses
+
         for event in audit_store.query():
             d = (
                 dataclasses.asdict(event)
