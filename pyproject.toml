@@ -770,7 +770,7 @@ languages = ["zh-Hans", "zh-TW", "ja", "ko", "hi", "bn", "ru", "es", "pt", "de",
 # this table, made by the person taking it on.
 [tool.bernstein.readme-l10n.owners]
 "zh-Hans" = "@chernistry"
-"zh-TW" = "@chernistry"
+"zh-TW" = "@awhite0030"
 "ja" = "@chernistry"
 "ko" = "@Bhumika-1432006"
 "hi" = "@vaibhav8a"
