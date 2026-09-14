@@ -1,0 +1,1 @@
+Added `bernstein trace follow <entity-id>` functionality to seamlessly search for trace execution entries, work ledger elements, and audit chain references in chronological order, with support for live tailing across these stores, `--out`, and `--since`.
