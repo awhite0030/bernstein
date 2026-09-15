@@ -1261,7 +1261,7 @@ class BernsteinApp(App[None]):
 
     def action_graceful_quit(self) -> None:
         """Start graceful drain with progress overlay."""
-        from bernstein.cli.drain_screen import DrainScreen
+        from bernstein.cli.display.drain_screen import DrainScreen
 
         self.push_screen(DrainScreen(), callback=self._on_drain_complete)
 
@@ -1383,6 +1383,27 @@ class BernsteinApp(App[None]):
                 self.set_timer(1.0, self.action_stop_bernstein)
         elif action == "stop":
             self.notify("Stopping all agents...", severity="warning")
+            # Write a verifiable HaltState record
+            import time
+            from pathlib import Path
+
+            from bernstein.core.approval.models import local_shell_principal
+            from bernstein.core.cost.ticket_cap import HaltState, write_halt_state
+
+            try:
+                principal = local_shell_principal()
+                state = HaltState(
+                    ticket_id="dashboard-stop",
+                    cost_usd=0.0,
+                    cap_usd=0.0,
+                    reason="operator_stop",
+                    principal=principal.identifier,
+                    timestamp=time.time(),
+                )
+                write_halt_state(state, base_dir=Path(".sdd"))
+            except Exception as exc:
+                self.notify(f"Could not record halt state: {exc}", severity="warning")
+
             self.action_stop_bernstein()
 
     @staticmethod
