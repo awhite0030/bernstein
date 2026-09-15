@@ -462,3 +462,40 @@ def test_dead_code_gate_runs_to_completion_instead_of_crashing(tmp_path: Path) -
     assert report.gates_run == ["dead_code"]
     (result,) = report.results
     assert result.status in ("pass", "fail", "warn")
+
+def test_dead_code_gate_command_not_found(tmp_path: Path) -> None:
+    """A missing dead_code_command yields command_not_found, not fail."""
+    import sys
+
+    from bernstein.core.config import QualityGatesConfig
+    from bernstein.core.quality.gate_pipeline import GatePipelineStep
+    from bernstein.core.quality.gate_runner import GateRunner
+
+    (tmp_path / "src.py").write_text("def f(): pass", encoding="utf-8")
+
+    runner = GateRunner(
+        config=QualityGatesConfig(
+            dead_code_command="this-is-not-a-real-vulture-command"
+        ),
+        workdir=tmp_path,
+        base_ref="main"
+    )
+    step = GatePipelineStep(name="dead_code", required=True, condition="python_changed")
+
+    # Explicitly using GateRunnerCommandsMixin's behavior since GateRunner's run
+    # executes vulture in an asyncio.to_thread wrapped execution if executed via run()
+    result = runner._run_dead_code_gate_sync(step, tmp_path, [str(tmp_path / "src.py")])
+    assert result.status == "command_not_found"
+    assert "not found" in result.details.lower()
+
+    runner = GateRunner(
+        config=QualityGatesConfig(
+            # Trigger the "no module named vulture" path since sys.executable exits with 1, not 127
+            dead_code_command=f'{sys.executable} -c "import sys; sys.stderr.write(\'No module named vulture\\n\'); sys.exit(1)"'
+        ),
+        workdir=tmp_path,
+        base_ref="main"
+    )
+    result = runner._run_dead_code_gate_sync(step, tmp_path, [str(tmp_path / "src.py")])
+    assert result.status == "command_not_found"
+    assert "no module named vulture" in result.details.lower()
