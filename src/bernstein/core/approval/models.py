@@ -211,6 +211,7 @@ class ApprovalDecision(StrEnum):
     ALLOW = "allow"
     REJECT = "reject"
     ALWAYS = "always"
+    RELEASE = "release"
 
 
 def _new_id() -> str:
@@ -365,4 +366,62 @@ class ResolvedApproval:
             "reason": self.reason,
             "resolved_at": self.resolved_at,
             "principal": self.principal.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class AuthorityLevelRefusal:
+    """A refusal record when an identity lacks the declared authority level.
+
+    Attributes:
+        principal_id: Identity attempting the action.
+        required_level: Level required by the configuration.
+        held_level: Level the identity actually holds.
+        reason: Explanatory text.
+    """
+
+    principal_id: str
+    required_level: str
+    held_level: str
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable representation."""
+        return {
+            "principal_id": self.principal_id,
+            "required_level": self.required_level,
+            "held_level": self.held_level,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class AuthorityEnvelope:
+    """The evidence-bound record binding for a release or halt.
+
+    Attributes:
+        action: "release" or "halt".
+        principal: The identity performing the action.
+        authority_level: The authority level they acted under.
+        authority_version: The version of the declaration they were checked against.
+        chain_head: The chain head hash at the instant.
+        evidence_hash: Hash of exactly the evidence they were shown.
+    """
+
+    action: str
+    principal: ApprovalPrincipal
+    authority_level: str
+    authority_version: str
+    chain_head: str
+    evidence_hash: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable representation."""
+        return {
+            "action": self.action,
+            "principal": self.principal.to_dict(),
+            "authority_level": self.authority_level,
+            "authority_version": self.authority_version,
+            "chain_head": self.chain_head,
+            "evidence_hash": self.evidence_hash,
         }

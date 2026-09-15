@@ -113,6 +113,10 @@ class HaltState:
     partial_artefacts: tuple[str, ...] = ()
     timestamp: float = field(default_factory=time.time)
     run_id: str | None = None
+    principal: str | None = None
+    authority_level: str | None = None
+    chain_head: str | None = None
+    evidence_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe mapping."""
@@ -125,6 +129,10 @@ class HaltState:
             "partial_artefacts": list(self.partial_artefacts),
             "timestamp": self.timestamp,
             "run_id": self.run_id,
+            "principal": self.principal,
+            "authority_level": self.authority_level,
+            "chain_head": self.chain_head,
+            "evidence_hash": self.evidence_hash,
         }
 
 
