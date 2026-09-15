@@ -1,0 +1,17 @@
+{
+    "action": "labeled",
+    "pull_request": {
+        "user": {
+            "login": "jules"
+        },
+        "head": {
+            "repo": {
+                "full_name": "awhite0030/bernstein"
+            },
+            "ref": "fix-dead-code-gate-missing-vulture-16295968593049213261"
+        },
+        "labels": [
+            {"name": "skip-autosync"}
+        ]
+    }
+}
