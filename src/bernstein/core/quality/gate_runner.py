@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from bernstein.core.quality.gate_commands import (
     GateRunnerCommandsMixin,
-    _module_name_from_path,
-    _resolve_import_from,
+    module_name_from_path,
+    resolve_import_from,
 )
 from bernstein.core.quality.gate_pipeline import (
     COMMAND_ERROR_PREFIX as _COMMAND_ERROR_PREFIX,
@@ -710,7 +710,7 @@ class GateRunner:
             logger.warning("dead_code_detector.analyse failed: %s", exc)
             report = dead_code_detector.DeadCodeReport()
 
-        return GateRunnerCommandsMixin._build_dead_code_result(step, command, ok, vulture_detail, report)
+        return GateRunnerCommandsMixin.build_dead_code_result(step, command, ok, vulture_detail, report)
 
     def _run_comment_quality_gate_sync(
         self,
@@ -982,8 +982,8 @@ class GateRunner:
         """Check that every DB migration has a corresponding down/rollback path."""
         from bernstein.core.quality.gate_commands import GateRunnerCommandsMixin
 
-        alembic_count, alembic_issues = GateRunnerCommandsMixin._check_alembic_migrations(run_dir)
-        sql_count, sql_issues = GateRunnerCommandsMixin._check_sql_migrations(run_dir)
+        alembic_count, alembic_issues = GateRunnerCommandsMixin.check_alembic_migrations(run_dir)
+        sql_count, sql_issues = GateRunnerCommandsMixin.check_sql_migrations(run_dir)
         migration_count = alembic_count + sql_count
         issues = alembic_issues + sql_issues
 
@@ -1520,7 +1520,7 @@ class GateRunner:
                 continue
             if "tests" in rel_parts:
                 continue
-            module = _module_name_from_path(py_file, search_root)
+            module = module_name_from_path(py_file, search_root)
             if module:
                 module_to_path[module] = py_file
         return module_to_path, search_root
@@ -1540,7 +1540,7 @@ class GateRunner:
                         if alias.name in module_to_path:
                             graph[module].add(alias.name)
                 elif isinstance(node, ast.ImportFrom):
-                    target = _resolve_import_from(module, node.level, node.module)
+                    target = resolve_import_from(module, node.level, node.module)
                     if target and target in module_to_path:
                         graph[module].add(target)
         return graph
@@ -1582,7 +1582,7 @@ class GateRunner:
         graph = self._build_import_graph(module_to_path)
 
         changed_modules = {
-            _module_name_from_path(run_dir / rel_path, search_root)
+            module_name_from_path(run_dir / rel_path, search_root)
             for rel_path in changed_files
             if rel_path.endswith(".py")
         }

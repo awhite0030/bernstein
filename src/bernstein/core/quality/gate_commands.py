@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _module_name_from_path(path: Path, root: Path) -> str:
+def module_name_from_path(path: Path, root: Path) -> str:
     """Return the dotted module name for a Python file relative to ``root``."""
     try:
         rel = path.relative_to(root)
@@ -44,7 +44,7 @@ def _module_name_from_path(path: Path, root: Path) -> str:
     return ".".join(parts)
 
 
-def _resolve_import_from(module_name: str, level: int, imported_module: str | None) -> str:
+def resolve_import_from(module_name: str, level: int, imported_module: str | None) -> str:
     """Resolve an ``ImportFrom`` target against a current module name."""
     if level <= 0:
         return imported_module or ""
@@ -128,9 +128,9 @@ class GateRunnerCommandsMixin:
     and cache-mixin helpers are available on ``self`` the way they are on a
     real ``GateRunner`` instance. Calling most of these methods directly
     (``GateRunnerCommandsMixin().some_gate(...)``) raises ``AttributeError``,
-    the same failure #5572 hit for ``_build_dead_code_result`` before that
+    the same failure #5572 hit for ``build_dead_code_result`` before that
     fix qualified the one call actually needed
-    (``GateRunnerCommandsMixin._build_dead_code_result(...)``, a
+    (``GateRunnerCommandsMixin.build_dead_code_result(...)``, a
     ``@staticmethod`` with no dependency on ``self``) instead of assuming
     composition that does not exist.
 
@@ -325,7 +325,7 @@ class GateRunnerCommandsMixin:
             )
 
         report = self._run_dead_code_ast_analysis(dead_code_detector, python_files, run_dir)
-        return self._build_dead_code_result(step, command, ok, vulture_detail, report)
+        return self.build_dead_code_result(step, command, ok, vulture_detail, report)
 
     def _run_dead_code_ast_analysis(self: Any, _dead_code_detector: Any, python_files: list[str], run_dir: Path) -> Any:
         """Run AST-based dead code analysis, returning the report."""
@@ -344,7 +344,7 @@ class GateRunnerCommandsMixin:
             return dcd.DeadCodeReport()
 
     @staticmethod
-    def _build_dead_code_result(
+    def build_dead_code_result(
         step: GatePipelineStep,
         command: str,
         ok: bool,
@@ -652,7 +652,7 @@ class GateRunnerCommandsMixin:
     # -- migration reversibility gate ----------------------------------------
 
     @staticmethod
-    def _check_alembic_migrations(run_dir: Path) -> tuple[int, list[str]]:
+    def check_alembic_migrations(run_dir: Path) -> tuple[int, list[str]]:
         """Check Alembic migration files for missing downgrade. Returns (count, issues)."""
         count = 0
         issues: list[str] = []
@@ -676,7 +676,7 @@ class GateRunnerCommandsMixin:
         return count, issues
 
     @staticmethod
-    def _check_sql_migrations(run_dir: Path) -> tuple[int, list[str]]:
+    def check_sql_migrations(run_dir: Path) -> tuple[int, list[str]]:
         """Check SQL up/down migration pairs. Returns (count, issues)."""
         count = 0
         issues: list[str] = []
@@ -703,8 +703,8 @@ class GateRunnerCommandsMixin:
         run_dir: Path,
     ) -> GateResult:
         """Check that every DB migration has a corresponding down/rollback path."""
-        alembic_count, alembic_issues = self._check_alembic_migrations(run_dir)
-        sql_count, sql_issues = self._check_sql_migrations(run_dir)
+        alembic_count, alembic_issues = self.check_alembic_migrations(run_dir)
+        sql_count, sql_issues = self.check_sql_migrations(run_dir)
         migration_count = alembic_count + sql_count
         issues = alembic_issues + sql_issues
 
@@ -1144,7 +1144,7 @@ class GateRunnerCommandsMixin:
                 continue
             if "tests" in rel_parts:
                 continue
-            module = _module_name_from_path(py_file, search_root)
+            module = module_name_from_path(py_file, search_root)
             if module:
                 module_to_path[module] = py_file
         return module_to_path, search_root
@@ -1164,7 +1164,7 @@ class GateRunnerCommandsMixin:
                         if alias.name in module_to_path:
                             graph[module].add(alias.name)
                 elif isinstance(node, ast.ImportFrom):
-                    target = _resolve_import_from(module, node.level, node.module)
+                    target = resolve_import_from(module, node.level, node.module)
                     if target and target in module_to_path:
                         graph[module].add(target)
         return graph
@@ -1206,7 +1206,7 @@ class GateRunnerCommandsMixin:
         graph = self._build_import_graph(module_to_path)
 
         changed_modules = {
-            _module_name_from_path(run_dir / rel_path, search_root)
+            module_name_from_path(run_dir / rel_path, search_root)
             for rel_path in changed_files
             if rel_path.endswith(".py")
         }
