@@ -138,3 +138,49 @@ def test_timestamps_are_utc_so_output_does_not_follow_the_reader(
     """A local-time render would break the byte-identical guarantee across hosts."""
     _, output = _follow(store, "trace-a")
     assert "1970-01-01T00:01:40Z" in " ".join(output.split())
+
+def test_since_resumes_from_the_given_entry_id(store: ContentAddressedTraceStore) -> None:
+    code, output = _follow(store, "T-100", "--since", "trace-b", "--as-json")
+    assert code == 0
+    entries = json.loads(output)
+    # trace-a and trace-b are skipped
+    assert [entry["trace_id"] for entry in entries] == ["trace-c"]
+
+def test_out_writes_the_per_entity_trace_to_its_own_file(store: ContentAddressedTraceStore, tmp_path: Path) -> None:
+    from pathlib import Path
+
+    out_file = tmp_path / "out.json"
+    code, output = _follow(store, "T-100", "--out", str(out_file))
+    assert code == 0
+    # verify file exists and contains the expected json
+    assert out_file.exists()
+    content = out_file.read_text()
+    assert "trace-a" in content
+    assert "trace-b" in content
+    assert "trace-c" in content
+
+
+def test_follow_prints_every_entry_referencing_the_entity_in_order(store: ContentAddressedTraceStore, tmp_path: Path) -> None:
+    # 1. Trace store already has entries for "T-100" (from fixture)
+    # 2. Add an audit entry for "T-100"
+    audit_dir = store.root.parent / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    import datetime as dt
+    from bernstein.core.security.audit import AuditLog
+    log = AuditLog(audit_dir)
+    log.log("task.started", "actor", "task", "T-100", {})
+
+    # 3. Add a work ledger entry for "T-100"
+    from bernstein.core.persistence.work_ledger import WorkLedger, run_ledger_dir, KIND_TASK_STARTED
+    run_id = "R-500"
+    ledger_dir = run_ledger_dir(store.root.parent, run_id)
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    wl = WorkLedger.open(ledger_dir)
+    wl.append(kind=KIND_TASK_STARTED, task_id="T-100", payload={})
+
+    code, output = _follow(store, "T-100")
+    assert code == 0
+    # Must reference entries from more than one source file
+    assert "trace-a" in output # trace store
+    assert "audit" in output or "hmac" in output or "task.started" in output # audit log
+    assert "work_ledger" in output or "R-500" in output or "task.started" in output # work ledger

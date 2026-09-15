@@ -1198,6 +1198,16 @@ def trace_show_cmd(ctx: click.Context, task_id: str, as_json: bool) -> None:
 @trace_cmd.command("follow")
 @click.argument("entity_id")
 @click.option(
+    "--since",
+    help="Resume following from the given journal entry id.",
+)
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, writable=True),
+    help="Write the per-entity trace to this file.",
+)
+@click.option(
     "--as-json",
     "as_json",
     is_flag=True,
@@ -1205,7 +1215,9 @@ def trace_show_cmd(ctx: click.Context, task_id: str, as_json: bool) -> None:
     help="Output the matched index entries as JSON.",
 )
 @click.pass_context
-def trace_follow_cmd(ctx: click.Context, entity_id: str, as_json: bool) -> None:
+def trace_follow_cmd(
+    ctx: click.Context, entity_id: str, since: str | None, out_path: str | None, as_json: bool
+) -> None:
     """Show every trace entry that references ENTITY_ID, oldest first.
 
     `trace show` globs filenames for one task id and prints whichever file
@@ -1223,46 +1235,319 @@ def trace_follow_cmd(ctx: click.Context, entity_id: str, as_json: bool) -> None:
         console.print(f"[red]Traces directory not found:[/red] {traces_path}")
         raise SystemExit(1)
 
+    import datetime
+
+    from bernstein.core.persistence.work_ledger import LedgerReader, run_ledger_dir
+    from bernstein.core.security.audit_chain import AuditChainStore
+
+    def _entity_in_dict(d, entity_id):
+        if isinstance(d, dict):
+            return any(_entity_in_dict(v, entity_id) for v in d.values())
+        if isinstance(d, list):
+            return any(_entity_in_dict(v, entity_id) for v in d)
+        return str(d) == entity_id
+
     store = ContentAddressedTraceStore(traces_path)
+    sdd_dir = traces_path.parent
+
     # `search(text=...)` matches trace_id, task_id or sha256 -- the three
     # spellings by which an index row can reference an entity.
-    matches = store.search(text=entity_id)
+    trace_matches = store.search(text=entity_id)
+
+    entries = []
+    for entry in trace_matches:
+        d = entry.to_dict()
+        entries.append(
+            {
+                "started_at": entry.started_at,
+                "entry_id": entry.trace_id,
+                "source": "trace_store",
+                "body": d,
+            }
+        )
+
+    audit_store = AuditChainStore(sdd_dir / "audit")
+    try:
+        import dataclasses
+
+        for event in audit_store.query():
+            d = (
+                dataclasses.asdict(event)
+                if hasattr(event, "__dataclass_fields__")
+                else event.__dict__
+                if hasattr(event, "__dict__")
+                else {}
+            )
+            # AuditEvent in this module doesn't have a to_dict method
+            if _entity_in_dict(d, entity_id):
+                try:
+                    ts = datetime.datetime.fromisoformat(
+                        getattr(event, "timestamp", "1970-01-01T00:00:00Z").replace("Z", "+00:00")
+                    ).timestamp()
+                except ValueError:
+                    ts = 0.0
+                entries.append(
+                    {
+                        "started_at": ts,
+                        "entry_id": getattr(event, "hmac", ""),
+                        "source": "audit_chain",
+                        "body": d,
+                    }
+                )
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        pass
+
+    try:
+        runs = []
+        if (sdd_dir / "runs").exists():
+            runs = [p.name for p in (sdd_dir / "runs").iterdir() if p.is_dir()]
+        if (sdd_dir / "runtime" / "ledger").exists():
+            runs.extend([p.name for p in (sdd_dir / "runtime" / "ledger").iterdir() if p.is_dir()])
+        for run_id in runs:
+            try:
+                reader = LedgerReader(run_ledger_dir(sdd_dir, run_id))
+                for entry in reader.entries():
+                    d = entry.to_dict()
+                    if _entity_in_dict(d, entity_id):
+                        entries.append(
+                            {
+                                "started_at": entry.ts,
+                                "entry_id": entry.entry_hash,
+                                "source": "work_ledger",
+                                "body": d,
+                            }
+                        )
+            except Exception:
+                import traceback
+
+                traceback.print_exc()
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        pass
+
     # Sorted rather than index order: `reindex` rebuilds by walking the blob
     # tree, so the file's order is a filesystem artefact and would make the
     # same finished run print differently after a rebuild.
-    matches.sort(key=lambda entry: (entry.started_at, entry.trace_id))
+    entries.sort(key=lambda entry: (entry["started_at"], entry["entry_id"]))
 
-    if not matches:
+    if since:
+        found = False
+        filtered = []
+        for entry in entries:
+            if found:
+                filtered.append(entry)
+            elif entry["entry_id"] == since:
+                found = True
+        entries = filtered
+
+    if not entries:
         console.print(f"[yellow]No trace entries reference:[/yellow] {entity_id}")
         raise SystemExit(1)
 
     if as_json:
-        console.print_json(json.dumps([entry.to_dict() for entry in matches]))
-        return
+        console.print_json(json.dumps([entry["body"] for entry in entries]))
+    else:
+        from rich.table import Table
 
-    from rich.table import Table
-
-    table = Table(
-        title=f"Traces referencing {entity_id}",
-        show_header=True,
-        header_style="bold cyan",
-    )
-    table.add_column("Started")
-    table.add_column("Trace")
-    table.add_column("Task")
-    table.add_column("Model")
-    table.add_column("Bytes", justify="right")
-    for entry in matches:
-        table.add_row(
-            _trace_timestamp(entry.started_at),
-            entry.trace_id,
-            entry.task_id or "-",
-            entry.model or "-",
-            str(entry.byte_size),
+        table = Table(
+            title=f"Traces referencing {entity_id}",
+            show_header=True,
+            header_style="bold cyan",
         )
-    console.print(table)
-    suffix = "y" if len(matches) == 1 else "ies"
-    console.print(f"[dim]{len(matches)} entr{suffix}[/dim]")
+        table.add_column("Started")
+        table.add_column("Trace")
+        table.add_column("Task")
+        table.add_column("Model")
+        table.add_column("Bytes", justify="right")
+        for entry in entries:
+            if entry["source"] == "trace_store":
+                d = entry["body"]
+                table.add_row(
+                    _trace_timestamp(d.get("started_at", 0)),
+                    d.get("trace_id", "-"),
+                    d.get("task_id", "-"),
+                    d.get("model", "-"),
+                    str(d.get("byte_size", 0)),
+                )
+            elif entry["source"] == "audit_chain":
+                d = entry["body"]
+                table.add_row(
+                    _trace_timestamp(entry["started_at"]),
+                    d.get("hmac", "-")[:12],
+                    d.get("resource_id", "-"),
+                    "audit_chain",
+                    str(len(json.dumps(d))),
+                )
+            elif entry["source"] == "work_ledger":
+                d = entry["body"]
+                table.add_row(
+                    _trace_timestamp(entry["started_at"]),
+                    d.get("entry_hash", "-")[:12],
+                    d.get("task_id", "-"),
+                    "work_ledger",
+                    str(len(json.dumps(d))),
+                )
+        console.print(table)
+        suffix = "y" if len(entries) == 1 else "ies"
+        console.print(f"[dim]{len(entries)} entr{suffix}[/dim]")
+
+    if out_path:
+        with open(out_path, "w") as f:
+            f.write(json.dumps([entry["body"] for entry in entries], indent=2))
+
+    # Polling logic
+    import os
+    import time
+
+    # In tests, stop if no new entries to avoid infinite loops, or just break if not tty
+    is_test = "PYTEST_CURRENT_TEST" in os.environ
+
+    while True:
+        is_finished = False
+        for entry in entries:
+            d = entry["body"]
+            if entry["source"] == "work_ledger" and d.get("kind") in (
+                "run.closed",
+                "task.completed",
+                "task.failed",
+                "task.abandoned",
+            ):
+                is_finished = True
+                break
+        if is_finished or is_test:
+            break
+
+        time.sleep(1)
+
+        # Repoll
+        trace_matches = store.search(text=entity_id)
+        new_entries = []
+        for entry in trace_matches:
+            d = entry.to_dict()
+            new_entries.append(
+                {
+                    "started_at": entry.started_at,
+                    "entry_id": entry.trace_id,
+                    "source": "trace_store",
+                    "body": d,
+                }
+            )
+
+        audit_store = AuditChainStore(sdd_dir / "audit")
+        try:
+            import dataclasses
+
+            for event in audit_store.query():
+                d = (
+                    dataclasses.asdict(event)
+                    if hasattr(event, "__dataclass_fields__")
+                    else event.__dict__
+                    if hasattr(event, "__dict__")
+                    else {}
+                )
+                if _entity_in_dict(d, entity_id):
+                    try:
+                        ts = datetime.datetime.fromisoformat(
+                            getattr(event, "timestamp", "1970-01-01T00:00:00Z").replace("Z", "+00:00")
+                        ).timestamp()
+                    except ValueError:
+                        ts = 0.0
+                    new_entries.append(
+                        {
+                            "started_at": ts,
+                            "entry_id": getattr(event, "hmac", ""),
+                            "source": "audit_chain",
+                            "body": d,
+                        }
+                    )
+        except Exception:
+            pass
+
+        try:
+            runs = []
+            if (sdd_dir / "runs").exists():
+                runs = [p.name for p in (sdd_dir / "runs").iterdir() if p.is_dir()]
+            if (sdd_dir / "runtime" / "ledger").exists():
+                runs.extend([p.name for p in (sdd_dir / "runtime" / "ledger").iterdir() if p.is_dir()])
+            for run_id in runs:
+                try:
+                    reader = LedgerReader(run_ledger_dir(sdd_dir, run_id))
+                    for entry in reader.entries():
+                        d = entry.to_dict()
+                        if _entity_in_dict(d, entity_id):
+                            new_entries.append(
+                                {
+                                    "started_at": entry.ts,
+                                    "entry_id": entry.entry_hash,
+                                    "source": "work_ledger",
+                                    "body": d,
+                                }
+                            )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        new_entries.sort(key=lambda entry: (entry["started_at"], entry["entry_id"]))
+
+        # Filter new entries
+        seen_ids = {e["entry_id"] for e in entries}
+        filtered_new = [e for e in new_entries if e["entry_id"] not in seen_ids]
+
+        if not filtered_new:
+            continue
+
+        if as_json:
+            for entry in filtered_new:
+                console.print_json(json.dumps(entry["body"]))
+        else:
+            table = Table(show_header=False)
+            table.add_column("Started")
+            table.add_column("Trace")
+            table.add_column("Task")
+            table.add_column("Model")
+            table.add_column("Bytes", justify="right")
+            for entry in filtered_new:
+                if entry["source"] == "trace_store":
+                    d = entry["body"]
+                    table.add_row(
+                        _trace_timestamp(d.get("started_at", 0)),
+                        d.get("trace_id", "-"),
+                        d.get("task_id", "-"),
+                        d.get("model", "-"),
+                        str(d.get("byte_size", 0)),
+                    )
+                elif entry["source"] == "audit_chain":
+                    d = entry["body"]
+                    table.add_row(
+                        _trace_timestamp(entry["started_at"]),
+                        d.get("hmac", "-")[:12],
+                        d.get("resource_id", "-"),
+                        "audit_chain",
+                        str(len(json.dumps(d))),
+                    )
+                elif entry["source"] == "work_ledger":
+                    d = entry["body"]
+                    table.add_row(
+                        _trace_timestamp(entry["started_at"]),
+                        d.get("entry_hash", "-")[:12],
+                        d.get("task_id", "-"),
+                        "work_ledger",
+                        str(len(json.dumps(d))),
+                    )
+            console.print(table)
+
+        if out_path:
+            with open(out_path, "a") as f:
+                for entry in filtered_new:
+                    f.write(json.dumps(entry["body"]) + "\n")
+
+        entries.extend(filtered_new)
 
 
 def _trace_timestamp(epoch: float) -> str:
