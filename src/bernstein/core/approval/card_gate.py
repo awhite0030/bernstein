@@ -117,7 +117,7 @@ REFUSAL_REASON_BEFORE_ISSUE = "before_issue"
 #: string, a different case, a driver-specific synonym such as ``approve_all``)
 #: is refused: an unrecognised decision that reached the chain unvalidated would
 #: be recorded as a settlement whose meaning no verifier could reconstruct.
-ALLOWED_DECISIONS = frozenset({"approve", "reject"})
+ALLOWED_DECISIONS = frozenset({"approve", "reject", "release"})
 
 #: Refusal reasons that settle a card permanently.
 #:
