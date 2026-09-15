@@ -58,7 +58,7 @@ function rowFor(html, id) {
 test('a metric with no data renders as not measured rather than as zero', async (t) => {
   const { GovernancePanel } = await loadPanel(t);
   const html = renderToStaticMarkup(
-    createElement(GovernancePanel, { coverage: report([UNMEASURED, { ...MEASURED, covered: 0, total: 0 }]) }),
+    createElement(GovernancePanel, { coverage: report([UNMEASURED, { ...MEASURED, covered: 0, total: 0 }]), gaps: [] }),
   );
 
   for (const id of ['delegation_hops', 'attributable_actions']) {
@@ -76,7 +76,7 @@ test('a metric with no data renders as not measured rather than as zero', async 
 test('a measured zero renders as a zero fraction and is not called not measured', async (t) => {
   const { GovernancePanel } = await loadPanel(t);
   const html = renderToStaticMarkup(
-    createElement(GovernancePanel, { coverage: report([{ ...MEASURED, covered: 0, total: 18 }]) }),
+    createElement(GovernancePanel, { coverage: report([{ ...MEASURED, covered: 0, total: 18 }]), gaps: [] }),
   );
 
   const row = rowFor(html, 'attributable_actions');
@@ -94,7 +94,7 @@ test('every measured metric names the denominator its fraction was taken over', 
     MEASURED,
     { ...MEASURED, id: 'recomputable_decisions', label: 'Decisions recomputable from inputs', denominator_label: 'decisions recorded in this run', covered: 12, total: 12 },
   ];
-  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: report(metrics) }));
+  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: report(metrics), gaps: [] }));
 
   for (const metric of metrics) {
     const row = rowFor(html, metric.id);
@@ -111,7 +111,7 @@ test('a partial fraction never rounds up to 100% or down to 0%', async (t) => {
     { ...MEASURED, id: 'nearly_none', covered: 1, total: 1000 },
     { ...MEASURED, id: 'exactly_all', covered: 7, total: 7 },
   ];
-  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: report(metrics) }));
+  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: report(metrics), gaps: [] }));
 
   assert.ok(!rowFor(html, 'nearly_all').includes('100%'), '999/1000 is presented as complete coverage');
   assert.ok(!/\b0%/.test(rowFor(html, 'nearly_none')), '1/1000 is presented as no coverage');
@@ -126,7 +126,7 @@ test('no bar is coloured by its value and the panel renders no aggregate score',
     { ...MEASURED, id: 'mid', covered: 50, total: 100 },
     { ...MEASURED, id: 'high', covered: 100, total: 100 },
   ];
-  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: report(metrics) }));
+  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: report(metrics), gaps: [] }));
 
   const fills = ['low', 'mid', 'high'].map((id) => {
     const match = rowFor(html, id).match(/data-metric-bar="fill"[^>]*class="([^"]*)"/);
@@ -167,7 +167,7 @@ test('the governance route is in the sidebar, routed, and titled', async (t) => 
 // 7
 test('the committed fixture exercises both the measured and the not-measured state', async (t) => {
   const { GovernancePanel, coverageFixture } = await loadPanel(t);
-  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: coverageFixture }));
+  const html = renderToStaticMarkup(createElement(GovernancePanel, { coverage: coverageFixture, gaps: [] }));
 
   assert.ok(html.includes('data-metric-state="measured"'), 'the fixture has no measured metric');
   assert.ok(html.includes('data-metric-state="not-measured"'), 'the fixture has no unmeasured metric');
@@ -175,4 +175,53 @@ test('the committed fixture exercises both the measured and the not-measured sta
     assert.ok(html.includes(`data-metric="${metric.id}"`), `${metric.id} is not rendered`);
     assert.ok(html.includes(metric.denominator_label), `${metric.id} renders without its denominator`);
   }
+});
+
+// Gaps list tests
+test('the panel renders an empty gaps list as nothing known to be uncovered', async (t) => {
+  const { GovernancePanel } = await loadPanel(t);
+  const html = renderToStaticMarkup(
+    createElement(GovernancePanel, { coverage: report([]), gaps: [] })
+  );
+
+  assert.ok(html.includes('nothing known to be uncovered'));
+});
+
+test('a gap row renders its name, consequence, and issue link', async (t) => {
+  const gapOpenTest = {
+    gap: 'tool calls',
+    why: 'no per-call identity record',
+    issue: 5062,
+    resolved: false
+  };
+
+  const { GovernancePanel } = await loadPanel(t);
+  const html = renderToStaticMarkup(
+    createElement(GovernancePanel, { coverage: report([]), gaps: [gapOpenTest] })
+  );
+
+  assert.ok(html.includes('data-gap="tool calls"'));
+  assert.ok(html.includes('data-gap-state="open"'));
+  assert.ok(html.includes('tool calls'));
+  assert.ok(html.includes('no per-call identity record'));
+  assert.ok(html.includes('href="https://github.com/sipyourdrink-ltd/bernstein/issues/5062"'));
+  assert.ok(html.includes('>#5062<'));
+});
+
+test('a resolved gap is marked as resolved and rendered with a strike-through', async (t) => {
+  const gapResolvedTest = {
+    gap: 'tool calls',
+    why: 'no per-call identity record',
+    issue: 5062,
+    resolved: true
+  };
+
+  const { GovernancePanel } = await loadPanel(t);
+  const html = renderToStaticMarkup(
+    createElement(GovernancePanel, { coverage: report([]), gaps: [gapResolvedTest] })
+  );
+
+  assert.ok(html.includes('data-gap="tool calls"'));
+  assert.ok(html.includes('data-gap-state="resolved"'));
+  assert.ok(html.includes('line-through'));
 });

@@ -22,6 +22,7 @@
 
 import { Pill, SectionLabel } from '@/lib/states';
 import fixture from './governance-coverage.fixture.json';
+import gapsFixture from './governance-gaps.fixture.json';
 
 export type CoverageMetric = {
   id: string;
@@ -34,6 +35,13 @@ export type CoverageMetric = {
   total: number | null;
   /** Why the metric has no fraction. Rendered instead of a bar. */
   unmeasured_reason: string | null;
+};
+
+export type CoverageGap = {
+  gap: string;
+  why: string;
+  issue: number;
+  resolved: boolean;
 };
 
 export type CoverageReport = {
@@ -132,7 +140,32 @@ function MetricRow({ metric }: { metric: CoverageMetric }) {
   );
 }
 
-export function GovernancePanel({ coverage }: { coverage: CoverageReport }) {
+function GapRow({ gap }: { gap: CoverageGap }) {
+  const issueUrl = `https://github.com/sipyourdrink-ltd/bernstein/issues/${gap.issue}`;
+  return (
+    <div
+      data-gap={gap.gap}
+      data-gap-state={gap.resolved ? 'resolved' : 'open'}
+      className="border-b border-border-subtle py-3 last:border-0"
+    >
+      <div className={`flex flex-wrap items-baseline gap-2 ${gap.resolved ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+        <span className="text-body font-medium">{gap.gap}</span>
+        <span className="text-body text-muted-foreground">—</span>
+        <span className="text-body flex-1">{gap.why}</span>
+        <a
+          href={issueUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono text-body-md hover:underline"
+        >
+          #{gap.issue}
+        </a>
+      </div>
+    </div>
+  );
+}
+
+export function GovernancePanel({ coverage, gaps = [] }: { coverage: CoverageReport; gaps?: CoverageGap[] }) {
   const measuredCount = coverage.metrics.filter(isMeasured).length;
   return (
     <div className="space-y-6 p-6">
@@ -164,10 +197,25 @@ export function GovernancePanel({ coverage }: { coverage: CoverageReport }) {
           <MetricRow key={metric.id} metric={metric} />
         ))}
       </section>
+
+      <section className="space-y-4 pt-4">
+        <SectionLabel>not covered</SectionLabel>
+        {gaps.length === 0 ? (
+          <p className="text-body text-muted-foreground">
+            nothing known to be uncovered
+          </p>
+        ) : (
+          <div className="rounded-md border border-border bg-card px-4 py-1">
+            {gaps.map((gap) => (
+              <GapRow key={gap.gap} gap={gap} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
 export default function Governance() {
-  return <GovernancePanel coverage={coverageFixture} />;
+  return <GovernancePanel coverage={coverageFixture} gaps={gapsFixture} />;
 }
