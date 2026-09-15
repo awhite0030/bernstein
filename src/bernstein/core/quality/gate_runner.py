@@ -667,6 +667,25 @@ class GateRunner:
 
         command = self._dead_code_command(step, python_files)
         ok, vulture_detail, _exit_code = qg.run_command_sync(command, run_dir, self._config.timeout_s)
+
+        is_missing = (
+            _exit_code == 127
+            or "no module named vulture" in vulture_detail.lower()
+            or "no module named 'vulture'" in vulture_detail.lower()
+            or "command not found" in vulture_detail.lower()
+        )
+        if is_missing:
+            return GateResult(
+                name=step.name,
+                status="command_not_found",
+                required=step.required,
+                blocked=step.required,
+                cached=False,
+                duration_ms=0,
+                details=f"Command not found: {vulture_detail}",
+                metadata={"command": command},
+            )
+
         if vulture_detail.startswith(_TIMED_OUT_PREFIX):
             return GateResult(
                 name=step.name,
