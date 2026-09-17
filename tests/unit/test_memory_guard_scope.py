@@ -2,7 +2,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-import resource
+
+import pytest
+
 
 def test_memory_guard_not_applied_to_xdist_controller(tmp_path: Path):
     """Ensure the xdist controller process doesn't get the memory limit.
@@ -11,7 +13,7 @@ def test_memory_guard_not_applied_to_xdist_controller(tmp_path: Path):
     not using xdist.
     """
     plugin_path = tmp_path / "conftest.py"
-    plugin_content = '''
+    plugin_content = """
 import pytest
 import platform
 import os
@@ -27,7 +29,7 @@ def pytest_configure(config):
     soft, _ = resource.getrlimit(resource.RLIMIT_AS)
     role = "worker" if is_worker else "controller"
     print(f"\\nLIMIT_{role}_{soft}\\n")
-'''
+"""
     plugin_path.write_text(plugin_content)
 
     test_path = tmp_path / "test_dummy.py"
@@ -38,15 +40,28 @@ def pytest_configure(config):
 
     # We want to load the root conftest which currently applies the limit at import time
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", str(tmp_path), "-n", "2", "-p", "no:cacheprovider", "-p", "tests.conftest", "-s"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(tmp_path),
+            "-n",
+            "2",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "tests.conftest",
+            "-s",
+        ],
         capture_output=True,
         text=True,
         cwd=str(Path.cwd()),
-        env=env
+        env=env,
     )
 
     out = result.stdout
 
+    resource = pytest.importorskip("resource")
     orig_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
 
     print("STDOUT:")
