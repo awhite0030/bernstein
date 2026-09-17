@@ -121,29 +121,9 @@ _SPAWNER_TMP_REPO_TESTS = {
 if platform.system() != "Windows":
     import resource
 
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Configure pytest environment (e.g. apply memory limits)."""
-    if platform.system() == "Windows":
-        return
-
-    is_worker = hasattr(config, "workerinput")
-
-    # numprocesses can be an integer, or strings like "auto" or "logical"
-    num_processes = getattr(config.option, "numprocesses", None)
-
-    xdist_active = False
-    if num_processes is not None and (
-        (isinstance(num_processes, str) and num_processes.lower() in ("auto", "logical"))
-        or (isinstance(num_processes, int) and num_processes > 0)
-        or (isinstance(num_processes, str) and num_processes.isdigit() and int(num_processes) > 0)
-    ):
-        xdist_active = True
-
-    if is_worker or not xdist_active:
-        with suppress(ValueError, AttributeError):
-            _soft, _hard = resource.getrlimit(resource.RLIMIT_AS)
-            resource.setrlimit(resource.RLIMIT_AS, (_MAX_RSS_BYTES, _hard))
+    with suppress(ValueError, AttributeError):
+        _soft, _hard = resource.getrlimit(resource.RLIMIT_AS)
+        resource.setrlimit(resource.RLIMIT_AS, (_MAX_RSS_BYTES, _hard))
 
 
 def _current_rss_bytes() -> int:
