@@ -64,10 +64,11 @@ def pytest_configure(config):
     resource = pytest.importorskip("resource")
     orig_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
 
-    print("STDOUT:")
-    print(out)
+    if result.returncode != 0 and "LIMIT_controller" not in out:
+        print("STDOUT:", out, file=sys.stderr)
+        print("STDERR:", result.stderr, file=sys.stderr)
 
-    assert "LIMIT_controller" in out
+    assert "LIMIT_controller" in out, f"Failed to run pytest in subprocess. STDERR: {result.stderr}"
 
     lines = out.splitlines()
     for line in lines:
