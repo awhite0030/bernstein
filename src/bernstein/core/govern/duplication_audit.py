@@ -98,7 +98,7 @@ class DuplicationReport:
     @property
     def failed(self) -> tuple[DuplicationFinding, ...]:
         """The checks that counted more than they should have."""
-        return tuple(f for f in self.findings if Verdict.MEASURED_FAILED is f.verdict)
+        return tuple(f for f in self.findings if f.verdict is Verdict.MEASURED_FAILED)
 
     @property
     def not_yet_measurable(self) -> tuple[DuplicationFinding, ...]:
@@ -108,7 +108,7 @@ class DuplicationReport:
         denominator that silently includes what was not measured is the thing
         that makes an aggregate look like coverage it does not have.
         """
-        return tuple(f for f in self.findings if Verdict.NOT_YET_MEASURABLE is f.verdict)
+        return tuple(f for f in self.findings if f.verdict is Verdict.NOT_YET_MEASURABLE)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the canonical serialization.
