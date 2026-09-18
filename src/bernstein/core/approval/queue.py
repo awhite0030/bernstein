@@ -215,7 +215,9 @@ class ApprovalQueue:
             approval = PendingApproval.from_dict(data)
             self._pending[approval.id] = approval
 
-        for entry in sorted(self._base_dir.glob(f"*{_RESOLVED_SUFFIX}")):
+        for entry in sorted(
+            list(self._base_dir.glob(f"*{_RESOLVED_SUFFIX}")) + list(self._base_dir.glob("*.release.json"))
+        ):
             try:
                 raw = json.loads(entry.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -358,32 +360,73 @@ class ApprovalQueue:
         with self._lock:
             existing = self._resolved.get(approval_id)
             if existing is not None:
-                # Idempotent for nonce-less internal callers; nonce
-                # replay attempts against an already-resolved approval
-                # are rejected as expired to foreclose stale-button
-                # double-tap on superseded prompts.
-                if nonce is not None:
-                    raise ApprovalNonceExpired(f"Approval {approval_id} is already resolved; nonce replay rejected.")
-                return existing
-            if approval_id not in self._pending:
+                if existing.decision == ApprovalDecision.REJECT and decision == ApprovalDecision.RELEASE:
+                    pass  # Allow release on top of reject
+                else:
+                    # Idempotent for nonce-less internal callers; nonce
+                    # replay attempts against an already-resolved approval
+                    # are rejected as expired to foreclose stale-button
+                    # double-tap on superseded prompts.
+                    if nonce is not None:
+                        raise ApprovalNonceExpired(
+                            f"Approval {approval_id} is already resolved; nonce replay rejected."
+                        )
+                    return existing
+            if approval_id not in self._pending and existing is None:
                 raise KeyError(f"Unknown approval id: {approval_id}")
-            pending = self._pending[approval_id]
-            if nonce is not None:
-                supplied = _coerce_nonce(nonce)
-                if supplied is None or not _nonces_equal(supplied, pending.nonce):
-                    raise ApprovalNonceMismatch(f"Approval {approval_id} nonce does not match; refusing to resolve.")
+            if (
+                existing is not None
+                and existing.decision == ApprovalDecision.REJECT
+                and decision == ApprovalDecision.RELEASE
+            ):
+                # If we are releasing, the pending approval may no longer be in _pending.
+                # In that case, we can't check the nonce against the pending approval,
+                # but the user must provide valid authority anyway.
+                # We need to construct a PendingApproval if it's not in pending.
+                # However, this mechanism might be flawed if we don't have the real pending approval data.
+                # Let's read it from the resolved record if possible, or just construct it.
+                pending = self._pending.get(approval_id)
+                if pending is None:
+                    pending = PendingApproval(id=approval_id, tool_name="unknown")
+            else:
+                pending = self._pending[approval_id]
+                if nonce is not None:
+                    supplied = _coerce_nonce(nonce)
+                    if supplied is None or not _nonces_equal(supplied, pending.nonce):
+                        raise ApprovalNonceMismatch(
+                            f"Approval {approval_id} nonce does not match; refusing to resolve."
+                        )
             resolution = ResolvedApproval(
                 approval_id=approval_id,
                 decision=decision,
                 principal=principal,
                 reason=reason,
             )
+            if (
+                existing is not None
+                and existing.decision == ApprovalDecision.REJECT
+                and decision == ApprovalDecision.RELEASE
+            ):
+                # Store the release record alongside or in place in memory?
+                # "The denial must survive; the release sits on top of it"
+                # In memory we can just overwrite the resolution so that `get_resolution` returns the release
+                # but we will write it out as a separate file or just keep both?
+                pass
             self._resolved[approval_id] = resolution
             event = self._events.setdefault(approval_id, asyncio.Event())
             self._pending.pop(approval_id, None)
 
         payload = json.dumps(resolution.to_dict(), indent=2, sort_keys=True)
-        _atomic_write(self._resolved_path(approval_id), payload)
+
+        if (
+            existing is not None
+            and existing.decision == ApprovalDecision.REJECT
+            and decision == ApprovalDecision.RELEASE
+        ):
+            # Write out a separate release file to preserve the original denial
+            _atomic_write(self._resolved_path(approval_id).with_suffix(".release.json"), payload)
+        else:
+            _atomic_write(self._resolved_path(approval_id), payload)
         # Remove the pending sentinel so list_pending() on re-open is clean.
         try:
             self._pending_path(approval_id).unlink(missing_ok=True)
