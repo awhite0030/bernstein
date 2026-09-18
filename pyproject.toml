@@ -771,7 +771,7 @@ languages = ["zh-Hans", "zh-TW", "ja", "ko", "hi", "bn", "ru", "es", "pt", "de",
 [tool.bernstein.readme-l10n.owners]
 "zh-Hans" = "@7487"
 "zh-TW" = "@chernistry"
-"ja" = "@chernistry"
+"ja" = "@awhite0030"
 "ko" = "@Bhumika-1432006"
 "hi" = "@vaibhav8a"
 "bn" = "@chernistry"
