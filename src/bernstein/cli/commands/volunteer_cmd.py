@@ -35,13 +35,36 @@ if TYPE_CHECKING:
     from bernstein.core.volunteer.clean_room import CleanRoomResult
 
 
-@click.group("volunteer")
-def volunteer_group() -> None:
-    """Volunteer-worker surfaces: donate agent capacity to opt-in projects.
+@click.group("volunteer", invoke_without_command=True)
+@click.pass_context
+def volunteer_group(ctx: click.Context) -> None:
+    """Join the volunteer network: donate agent capacity in one step.
+
+    This command is the entry point for running a volunteer agent. It requires
+    no account and no manual configuration. It detects your available execution
+    backends, offers a curated list of beginner-friendly projects, explains
+    what it will do, and records your consent to start work.
 
     A project declares its policy in `.bernstein/volunteer.json`; see
     `docs/reference/volunteer-manifest.md` for the schema.
     """
+    ctx.ensure_object(dict)
+    if ctx.invoked_subcommand is None:
+        click.echo("Bernstein Volunteer Onboarding")
+        click.echo("==============================")
+        click.echo()
+        click.echo("This command will walk you from nothing to a running volunteer task.")
+        click.echo("It will detect a usable execution backend, offer a starter index of")
+        click.echo("projects, and record your explicit consent as a signed receipt before")
+        click.echo("handing off to the autopilot to do real work.")
+        click.echo()
+        click.echo("NOT YET AVAILABLE: The end-to-end flow is blocked on pending issues")
+        click.echo("(#3866 for consent receipts, #3885 for the autopilot).")
+        click.echo()
+        click.echo("What just happened: You launched the onboarding flow. Because the underlying")
+        click.echo("pieces are not finished yet, it printed this message and stopped cleanly.")
+        click.echo("When complete, this same command will let you stop or limit the worker at any time.")
+        return
 
 
 @volunteer_group.command("verify")
