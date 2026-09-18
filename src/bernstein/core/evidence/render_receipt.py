@@ -401,6 +401,8 @@ class RenderReceipt:
     environment: EnvironmentDescriptor | None = None
     unstable_properties: dict[str, str] = field(default_factory=dict)
     property_vocabulary_version: str = ""
+    input_worktree_hash: str = ""
+    input_manifest_hash: str = ""
 
     def _binding(self) -> dict[str, Any]:
         """Return the canonical binding dict (excludes receipt_hash)."""
@@ -413,6 +415,8 @@ class RenderReceipt:
             "computed_styles": _canonical_rows(self.computed_styles),
             "accessibility_tree": _canonical_rows(self.accessibility_tree),
             "property_vocabulary_version": self.property_vocabulary_version,
+            "input_worktree_hash": self.input_worktree_hash,
+            "input_manifest_hash": self.input_manifest_hash,
         }
         if self.environment is not None:
             binding["environment"] = self.environment.to_dict()
@@ -482,6 +486,8 @@ class RenderReceipt:
             environment=env,
             unstable_properties=unstable_properties,
             property_vocabulary_version=str(row.get("property_vocabulary_version", "")),
+            input_worktree_hash=str(row.get("input_worktree_hash", "")),
+            input_manifest_hash=str(row.get("input_manifest_hash", "")),
         )
 
 
